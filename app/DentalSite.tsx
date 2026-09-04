@@ -2393,7 +2393,7 @@ function AdminPage({ lang, t }: { lang: Lang; t: (typeof copy)[Lang] }) {
   const [activeView, setActiveView] = useState<AdminView>("home");
   const [session, setSession] = useState<AdminSessionInfo | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [previewTick, setPreviewTick] = useState(0);
+  const [previewTick, setPreviewTick] = useState(() => Date.now());
   const [stats, setStats] = useState({ totalVisitors: 0, publishedArticles: 0, activeServices: 0, pendingReviews: 0, draftArticles: 0, newBookings: 0, alerts: [] as string[] });
   const [adminError, setAdminError] = useState("");
   const previewPath = adminPreviewPath(activeView);
@@ -2447,7 +2447,7 @@ function AdminPage({ lang, t }: { lang: Lang; t: (typeof copy)[Lang] }) {
   }, []);
 
   useEffect(() => {
-    setPreviewTick(0);
+    setPreviewTick(Date.now());
   }, [previewPath]);
 
   if (checkingSession) {
@@ -2497,7 +2497,7 @@ function AdminPage({ lang, t }: { lang: Lang; t: (typeof copy)[Lang] }) {
             <a className="secondary-button admin-public-link" href="/" target="_blank" rel="noreferrer">
               {isArabic ? "عرض الموقع العام" : "View Public Site"}
             </a>
-            <button className="secondary-button" type="button" onClick={() => { setPreviewTick((current) => current + 1); void loadDashboard(); }}>{isArabic ? "تحديث" : "Refresh"}</button>
+            <button className="secondary-button" type="button" onClick={() => { setPreviewTick(Date.now()); void loadDashboard(); }}>{isArabic ? "تحديث" : "Refresh"}</button>
           </div>
         </header>
 
@@ -2545,7 +2545,8 @@ function adminPreviewPath(view: AdminView) {
 
 function AdminLiveWorkspace({ children, previewPath, previewTick, isArabic }: { children: ReactNode; previewPath: string; previewTick: number; isArabic: boolean }) {
   if (!previewPath) return <>{children}</>;
-  const src = previewTick ? `${previewPath}${previewPath.includes("?") ? "&" : "?"}adminLive=${previewTick}` : previewPath;
+  const separator = previewPath.includes("?") ? "&" : "?";
+  const src = `${previewPath}${separator}cmsPreview=dr-amr-elshamy&previewVersion=${previewTick}`;
 
   return (
     <div className="admin-live-workspace">
