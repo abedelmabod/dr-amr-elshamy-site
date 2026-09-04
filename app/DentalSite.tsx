@@ -28,7 +28,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { createContext, type CSSProperties, FormEvent, type ReactNode, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, type CSSProperties, FormEvent, type ReactNode, type SyntheticEvent, useContext, useEffect, useMemo, useState } from "react";
 
 type Lang = "ar" | "en";
 type Page = "home" | "about" | "services" | "service-detail" | "cases" | "reviews" | "blog" | "contact" | "admin" | "not-found";
@@ -1240,6 +1240,16 @@ function EditModeBar({ enabled, isArabic, onToggle }: { enabled: boolean; isArab
   );
 }
 
+function interceptLiveEditClick(event: SyntheticEvent<HTMLElement>) {
+  event.preventDefault();
+  event.stopPropagation();
+  event.nativeEvent.stopImmediatePropagation?.();
+}
+
+function isInsideLiveEditModal(event: SyntheticEvent<HTMLElement>) {
+  return event.target instanceof Element && Boolean(event.target.closest(".live-edit-modal"));
+}
+
 function EditableText({ target, children, className, as = "span" }: { target: LiveEditTarget; children: ReactNode; className?: string; as?: "span" | "p" | "h1" | "h2" | "h3" | "strong" | "button-label" }) {
   const live = useContext(LiveEditContext);
   const [modalOpen, setModalOpen] = useState(false);
@@ -1260,9 +1270,9 @@ function EditableText({ target, children, className, as = "span" }: { target: Li
   return (
     <Tag
       className={className ? `${className} live-edit-text` : "live-edit-text"}
-      onClick={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
+      onClickCapture={(event) => {
+        if (isInsideLiveEditModal(event)) return;
+        interceptLiveEditClick(event);
         setModalOpen(true);
       }}
       data-live-edit="text"
@@ -1307,7 +1317,15 @@ function LiveEditableImage({ target, src, alt, className, loading, decorative }:
   if (!live.enabled) return <img className={className} src={src} alt={alt} loading={loading} aria-hidden={decorative ? "true" : undefined} />;
 
   return (
-    <span className="live-edit-image" data-live-edit="image" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setModalOpen(true); }}>
+    <span
+      className="live-edit-image"
+      data-live-edit="image"
+      onClickCapture={(event) => {
+        if (isInsideLiveEditModal(event)) return;
+        interceptLiveEditClick(event);
+        setModalOpen(true);
+      }}
+    >
       <img className={className} src={src} alt={alt} loading={loading} aria-hidden={decorative ? "true" : undefined} />
       <span><ImageIcon size={15} /> تغيير</span>
       {modalOpen ? (
