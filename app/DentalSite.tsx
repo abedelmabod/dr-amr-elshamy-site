@@ -154,12 +154,14 @@ type LiveEditTarget = {
 };
 type LiveEditContextValue = {
   enabled: boolean;
+  editMode: boolean;
   save: (target: LiveEditTarget, value: string) => Promise<boolean>;
   uploadImage: (file: File | undefined) => Promise<string>;
   updateSection: (key: string, action: "hide" | "up" | "down") => Promise<void>;
 };
 const LiveEditContext = createContext<LiveEditContextValue>({
   enabled: false,
+  editMode: false,
   save: async () => false,
   uploadImage: async () => "",
   updateSection: async () => undefined,
@@ -597,6 +599,7 @@ export function DentalSite({ page = "home", serviceSlug, article }: { page?: Pag
   const [bookingOpen, setBookingOpen] = useState(false);
   const [settings, setSettings] = useState<SiteSettings>(defaultSiteSettings);
   const [adminSession, setAdminSession] = useState<AdminSessionInfo | null>(null);
+  const [editMode, setEditMode] = useState(false);
 
   const t = copy[lang];
   const isArabic = lang === "ar";
@@ -674,6 +677,14 @@ export function DentalSite({ page = "home", serviceSlug, article }: { page?: Pag
       .then((session: AdminSessionInfo | null) => setAdminSession(session))
       .catch(() => setAdminSession(null));
   }, []);
+
+  useEffect(() => {
+    setEditMode(localStorage.getItem("cms-edit-mode") === "on");
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("cms-edit-mode", editMode ? "on" : "off");
+  }, [editMode]);
 
   useEffect(() => {
     const label = page === "service-detail" && serviceSlug ? `service/${serviceSlug}` : page === "blog" && article?.slug ? `blog/${article.slug}` : page;
@@ -793,15 +804,18 @@ export function DentalSite({ page = "home", serviceSlug, article }: { page?: Pag
   }
 
   const liveEdit = useMemo<LiveEditContextValue>(() => ({
-    enabled: Boolean(adminSession?.isSuperAdmin && page !== "admin"),
+    enabled: Boolean(adminSession?.isSuperAdmin && page !== "admin" && editMode),
+    editMode,
     save: saveLiveEdit,
     uploadImage: uploadLiveImage,
     updateSection: updateLiveSection,
-  }), [adminSession?.isSuperAdmin, page, data.layoutConfig, isArabic]);
+  }), [adminSession?.isSuperAdmin, page, editMode, data.layoutConfig, isArabic]);
+  const showEditModeBar = Boolean(adminSession?.isSuperAdmin && page !== "admin");
 
   return (
     <LiveEditContext.Provider value={liveEdit}>
     <main className={liveEdit.enabled ? "site-shell live-edit-enabled" : "site-shell"}>
+      {showEditModeBar ? <EditModeBar enabled={editMode} isArabic={isArabic} onToggle={() => setEditMode((current) => !current)} /> : null}
       <LoadingScreen />
       <SiteScripts scripts={data.scriptsConfig} />
       <SiteBanner banner={data.bannerConfig} isArabic={isArabic} />
@@ -1207,9 +1221,22 @@ function PageIntro({ page, t, isArabic, siteText = {} }: { page: Page; t: (typeo
   );
 }
 
+function EditModeBar({ enabled, isArabic, onToggle }: { enabled: boolean; isArabic: boolean; onToggle: () => void }) {
+  return (
+    <div className={enabled ? "edit-mode-bar is-on" : "edit-mode-bar"}>
+      <strong>{isArabic ? "وضع التعديل" : "Edit Mode"}</strong>
+      <button type="button" onClick={onToggle} aria-pressed={enabled}>
+        <span>{enabled ? "ON" : "OFF"}</span>
+        <i aria-hidden="true" />
+      </button>
+      <a href="/admin">{isArabic ? "لوحة التحكم" : "Dashboard"}</a>
+    </div>
+  );
+}
+
 function EditableText({ target, children, className, as = "span" }: { target: LiveEditTarget; children: ReactNode; className?: string; as?: "span" | "p" | "h1" | "h2" | "h3" | "strong" | "button-label" }) {
   const live = useContext(LiveEditContext);
-  const [editing, setEditing] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
   const [value, setValue] = useState("");
   const Tag = as === "button-label" ? "span" : as;
 
@@ -1218,8 +1245,7 @@ function EditableText({ target, children, className, as = "span" }: { target: Li
   }, [children]);
 
   async function save() {
-    if (!editing) return;
-    setEditing(false);
+    setModalOpen(false);
     if (value.trim()) await live.save(target, value);
   }
 
@@ -1228,45 +1254,74 @@ function EditableText({ target, children, className, as = "span" }: { target: Li
   return (
     <Tag
       className={className ? `${className} live-edit-text` : "live-edit-text"}
-      contentEditable={editing}
-      suppressContentEditableWarning
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        setEditing(true);
-      }}
-      onInput={(event) => setValue(event.currentTarget.textContent || "")}
-      onBlur={() => void save()}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" && !event.shiftKey) {
-          event.preventDefault();
-          void save();
-        }
+        setModalOpen(true);
       }}
       data-live-edit="text"
     >
-      {editing ? value : children}
+      {children}
       <Edit3 className="live-edit-pencil" size={15} aria-hidden="true" />
+      {modalOpen ? (
+        <span className="live-edit-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+          <label>
+            <span>Text</span>
+            <textarea autoFocus value={value} onChange={(event) => setValue(event.target.value)} />
+          </label>
+          <span className="live-edit-modal-actions">
+            <button type="button" onClick={() => void save()}><Check size={15} /> Save</button>
+            <button type="button" onClick={() => setModalOpen(false)}>Cancel</button>
+          </span>
+        </span>
+      ) : null}
     </Tag>
   );
 }
 
 function LiveEditableImage({ target, src, alt, className, loading, decorative }: { target: LiveEditTarget; src: string; alt: string; className?: string; loading?: "lazy" | "eager"; decorative?: boolean }) {
   const live = useContext(LiveEditContext);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [url, setUrl] = useState(src);
+
+  useEffect(() => {
+    setUrl(src);
+  }, [src]);
 
   async function pick(file: File | undefined) {
     const url = await live.uploadImage(file);
-    if (url) await live.save({ ...target, type: "image" }, url);
+    if (url) setUrl(url);
+  }
+
+  async function save() {
+    setModalOpen(false);
+    if (url.trim()) await live.save({ ...target, type: "image" }, url);
   }
 
   if (!live.enabled) return <img className={className} src={src} alt={alt} loading={loading} aria-hidden={decorative ? "true" : undefined} />;
 
   return (
-    <label className="live-edit-image" data-live-edit="image">
+    <span className="live-edit-image" data-live-edit="image" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setModalOpen(true); }}>
       <img className={className} src={src} alt={alt} loading={loading} aria-hidden={decorative ? "true" : undefined} />
-      <input type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={(event) => void pick(event.target.files?.[0])} />
       <span><ImageIcon size={15} /> تغيير</span>
-    </label>
+      {modalOpen ? (
+        <span className="live-edit-modal live-edit-image-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+          <label>
+            <span>Image URL</span>
+            <input value={url} onChange={(event) => setUrl(event.target.value)} />
+          </label>
+          <label className="live-edit-upload">
+            <span>Upload image</span>
+            <input type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={(event) => void pick(event.target.files?.[0])} />
+          </label>
+          {url ? <img src={url} alt="" /> : null}
+          <span className="live-edit-modal-actions">
+            <button type="button" onClick={() => void save()}><Check size={15} /> Save</button>
+            <button type="button" onClick={() => setModalOpen(false)}>Cancel</button>
+          </span>
+        </span>
+      ) : null}
+    </span>
   );
 }
 
