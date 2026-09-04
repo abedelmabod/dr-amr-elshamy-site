@@ -758,17 +758,22 @@ export function DentalSite({ page = "home", serviceSlug, article }: { page?: Pag
     });
   }
 
+  function preserveViewport() {
+    if (typeof window === "undefined") return;
+    const left = window.scrollX;
+    const top = window.scrollY;
+    window.requestAnimationFrame(() => window.scrollTo(left, top));
+  }
+
   async function saveLiveEdit(target: LiveEditTarget, value: string) {
-    const response = await fetch("/api/admin/live-edit", {
+    updateLocalConfig(target, value);
+    preserveViewport();
+    void fetch("/api/admin/live-edit", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ group: target.group, key: target.field, value, type: target.type || "text" }),
-    });
-    if (response.ok) {
-      updateLocalConfig(target, value);
-      return true;
-    }
-    return false;
+    }).catch(() => false);
+    return true;
   }
 
   async function uploadLiveImage(file: File | undefined) {
@@ -791,12 +796,13 @@ export function DentalSite({ page = "home", serviceSlug, article }: { page?: Pag
     }
     const nextLayout = { ...currentLayout, sections, hiddenSections: Array.from(hiddenSections) };
     setData((current) => ({ ...current, layoutConfig: nextLayout }));
-    await fetch("/api/admin/live-edit", {
+    preserveViewport();
+    void fetch("/api/admin/live-edit", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ group: "layoutConfig", key: "sections", value: sections }),
     });
-    await fetch("/api/admin/live-edit", {
+    void fetch("/api/admin/live-edit", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ group: "layoutConfig", key: "hiddenSections", value: Array.from(hiddenSections) }),
@@ -2441,14 +2447,7 @@ function AdminPage({ lang, t }: { lang: Lang; t: (typeof copy)[Lang] }) {
   }, []);
 
   useEffect(() => {
-    if (!previewPath) return;
-    const refresh = () => setPreviewTick((current) => current + 1);
-    window.addEventListener("admin-live-preview-refresh", refresh);
-    const timer = window.setInterval(() => setPreviewTick((current) => current + 1), 4500);
-    return () => {
-      window.removeEventListener("admin-live-preview-refresh", refresh);
-      window.clearInterval(timer);
-    };
+    setPreviewTick(0);
   }, [previewPath]);
 
   if (checkingSession) {
@@ -2546,8 +2545,7 @@ function adminPreviewPath(view: AdminView) {
 
 function AdminLiveWorkspace({ children, previewPath, previewTick, isArabic }: { children: ReactNode; previewPath: string; previewTick: number; isArabic: boolean }) {
   if (!previewPath) return <>{children}</>;
-  const separator = previewPath.includes("?") ? "&" : "?";
-  const src = `${previewPath}${separator}adminLive=${previewTick}`;
+  const src = previewTick ? `${previewPath}${previewPath.includes("?") ? "&" : "?"}adminLive=${previewTick}` : previewPath;
 
   return (
     <div className="admin-live-workspace">
@@ -2556,7 +2554,7 @@ function AdminLiveWorkspace({ children, previewPath, previewTick, isArabic }: { 
         <div className="admin-live-preview-head">
           <div>
             <strong>{isArabic ? "معاينة مباشرة" : "Live Preview"}</strong>
-            <span>{isArabic ? "تتحدث تلقائياً بعد الحفظ" : "Auto-refreshes after edits"}</span>
+            <span>{isArabic ? "الحفظ يتم في الخلفية بدون تحديث الصفحة" : "Background saves without page refresh"}</span>
           </div>
           <a href={previewPath} target="_blank" rel="noreferrer">{isArabic ? "فتح" : "Open"}</a>
         </div>
@@ -2568,7 +2566,7 @@ function AdminLiveWorkspace({ children, previewPath, previewTick, isArabic }: { 
 
 function refreshAdminLivePreview() {
   if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event("admin-live-preview-refresh"));
+    window.dispatchEvent(new Event("admin-content-saved"));
   }
 }
 
