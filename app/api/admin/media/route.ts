@@ -48,6 +48,26 @@ export async function POST(request: Request) {
   }
 }
 
+export async function PUT(request: Request) {
+  if (!(await isAdmin(request))) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+  try {
+    const payload = await request.json() as { id?: number };
+    const id = Number(payload.id);
+    const media = normalizeMedia(payload);
+    if (!id) return Response.json({ error: "Media id is required." }, { status: 400 });
+
+    const db = await getDb();
+    await db.prepare("UPDATE media_items SET alt = ?, category = ? WHERE id = ?")
+      .bind(media.alt, media.category, id)
+      .run();
+    await logActivity(db, "updated", "media", id, { category: media.category });
+    return Response.json({ ok: true });
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "Unexpected error" }, { status: 500 });
+  }
+}
+
 export async function DELETE(request: Request) {
   if (!(await isAdmin(request))) return Response.json({ error: "Unauthorized" }, { status: 401 });
 

@@ -1723,7 +1723,7 @@ function BlogPage({ data, isArabic }: { data: SiteData; isArabic: boolean }) {
           <article className="article-card" key={article.id}>
             <small>{isArabic ? "مقالة" : "Article"}</small>
             <h3>{article.title}</h3>
-            <p>{article.body}</p>
+            <p>{isArabic ? (article.excerpt_ar || article.meta_description || article.body) : (article.excerpt_en || article.excerpt_ar || article.meta_description || article.body)}</p>
             <strong>{article.conclusion}</strong>
           </article>
         ))}
@@ -1973,7 +1973,7 @@ function BlogPageLuxury({ data, isArabic }: { data: SiteData; isArabic: boolean 
             <img className="blog-thumb" src={article.cover_image || thumbImages[index % thumbImages.length]} alt="" aria-hidden="true" loading="lazy" />
             <small>{isArabic ? "تثقيف المرضى" : "Patient Education"}</small>
             <h3>{article.title}</h3>
-            <p>{article.meta_description || article.body}</p>
+            <p>{isArabic ? (article.excerpt_ar || article.meta_description || article.body) : (article.excerpt_en || article.excerpt_ar || article.meta_description || article.body)}</p>
             <a href={article.slug ? `/blog/${article.slug}` : "/blog"}>{isArabic ? "اقرأ المزيد" : "Read More"} <ChevronRight size={16} /></a>
           </article>
         ))}
@@ -2331,8 +2331,9 @@ function AdminPage({ lang, t }: { lang: Lang; t: (typeof copy)[Lang] }) {
   const [checkingSession, setCheckingSession] = useState(true);
   const [activeView, setActiveView] = useState<AdminView>("home");
   const [session, setSession] = useState<AdminSessionInfo | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [previewTick, setPreviewTick] = useState(0);
-  const [stats, setStats] = useState({ totalVisitors: 0, publishedArticles: 0, pendingReviews: 0, draftArticles: 0, newBookings: 0, alerts: [] as string[] });
+  const [stats, setStats] = useState({ totalVisitors: 0, publishedArticles: 0, activeServices: 0, pendingReviews: 0, draftArticles: 0, newBookings: 0, alerts: [] as string[] });
   const [adminError, setAdminError] = useState("");
   const previewPath = adminPreviewPath(activeView);
 
@@ -2425,12 +2426,17 @@ function AdminPage({ lang, t }: { lang: Lang; t: (typeof copy)[Lang] }) {
   }
 
   return (
-    <section className="admin-page admin-dashboard-shell">
-      <AdminSidebar activeView={activeView} isArabic={isArabic} session={session} onNavigate={setActiveView} onLogout={logout} />
+    <section className={sidebarCollapsed ? "admin-page admin-dashboard-shell sidebar-collapsed" : "admin-page admin-dashboard-shell"}>
+      <AdminSidebar activeView={activeView} isArabic={isArabic} session={session} collapsed={sidebarCollapsed} onToggleCollapse={() => setSidebarCollapsed((current) => !current)} onNavigate={setActiveView} onLogout={logout} />
       <main className="admin-main-panel">
         <header className="admin-main-header">
           <div>
             <p className="section-label">{isArabic ? "لوحة تحكم العيادة" : "Clinic Admin"}</p>
+            <nav className="admin-breadcrumbs" aria-label="Breadcrumbs">
+              <span>{isArabic ? "لوحة التحكم" : "Dashboard"}</span>
+              <ChevronRight size={14} />
+              <strong>{adminViewTitle(activeView, isArabic)}</strong>
+            </nav>
             <h2>{adminViewTitle(activeView, isArabic)}</h2>
           </div>
           <div className="admin-top-actions">
@@ -2555,11 +2561,13 @@ type AdminSidebarProps = {
   activeView: AdminView;
   isArabic: boolean;
   session: AdminSessionInfo | null;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
   onNavigate: (view: AdminView) => void;
   onLogout: () => void;
 };
 
-function AdminSidebar({ activeView, isArabic, session, onNavigate, onLogout }: AdminSidebarProps) {
+function AdminSidebar({ activeView, isArabic, session, collapsed, onToggleCollapse, onNavigate, onLogout }: AdminSidebarProps) {
   const allowedViews = new Set(allowedAdminViews(session));
   const siteLinks = [
     { key: "home" as const, label: isArabic ? "الرئيسية" : "Home", icon: <ClipboardCheck size={22} /> },
@@ -2609,7 +2617,8 @@ function AdminSidebar({ activeView, isArabic, session, onNavigate, onLogout }: A
     <aside className="admin-sidebar" aria-label={isArabic ? "تنقل لوحة التحكم" : "Admin navigation"}>
       <div className="admin-sidebar-brand">
         <img src="/brand/logo-transparent.png" alt="Dr. Amr Elshamy" />
-        <strong>{isArabic ? "لوحة الدكتور" : "Doctor Panel"}</strong>
+        {!collapsed ? <strong>{isArabic ? "لوحة الدكتور" : "Doctor Panel"}</strong> : null}
+        <button className="admin-sidebar-collapse" type="button" onClick={onToggleCollapse} aria-label={isArabic ? "تصغير القائمة" : "Collapse sidebar"}>{collapsed ? "☰" : "×"}</button>
       </div>
       <nav>
         {groups.map((group) => (
@@ -2620,29 +2629,30 @@ function AdminSidebar({ activeView, isArabic, session, onNavigate, onLogout }: A
               onClick={() => toggleGroup(group.key)}
               aria-expanded={Boolean(openGroups[group.key])}
             >
-              <span>{group.label}</span>
+              {!collapsed ? <span>{group.label}</span> : <span>{group.label.slice(0, 1)}</span>}
               <ChevronRight size={17} />
             </button>
             <div className="admin-nav-group-items">
               {group.items.filter((item) => allowedViews.has(item.key)).map((item) => (
                 <button className={activeView === item.key ? "active" : ""} type="button" key={item.key} onClick={() => onNavigate(item.key)}>
                   {item.icon}
-                  <span>{item.label}</span>
+                  {!collapsed ? <span>{item.label}</span> : null}
                 </button>
               ))}
             </div>
           </div>
         ))}
       </nav>
-      <button className="admin-logout" type="button" onClick={onLogout}><LogOut size={18} /> {isArabic ? "خروج" : "Logout"}</button>
+      <button className="admin-logout" type="button" onClick={onLogout}><LogOut size={18} /> {!collapsed ? (isArabic ? "خروج" : "Logout") : null}</button>
     </aside>
   );
 }
 
-function AdminOverview({ stats, isArabic }: { stats: { totalVisitors: number; publishedArticles: number; pendingReviews: number; draftArticles?: number; newBookings?: number; alerts?: string[] }; isArabic: boolean }) {
+function AdminOverview({ stats, isArabic }: { stats: { totalVisitors: number; publishedArticles: number; activeServices?: number; pendingReviews: number; draftArticles?: number; newBookings?: number; alerts?: string[] }; isArabic: boolean }) {
   const cards = [
     { label: isArabic ? "إجمالي الزوار" : "Total Visitors", value: stats.totalVisitors, icon: <UsersRound size={28} /> },
     { label: isArabic ? "مقالات منشورة" : "Published Articles", value: stats.publishedArticles, icon: <ClipboardList size={28} /> },
+    { label: isArabic ? "خدمات نشطة" : "Active Services", value: stats.activeServices || 0, icon: <SmilePlus size={28} /> },
     { label: isArabic ? "آراء بانتظار الموافقة" : "Pending Reviews", value: stats.pendingReviews, icon: <Star size={28} /> },
     { label: isArabic ? "مقالات مسودة" : "Draft Articles", value: stats.draftArticles || 0, icon: <ClipboardCheck size={28} /> },
     { label: isArabic ? "حجوزات جديدة" : "New Bookings", value: stats.newBookings || 0, icon: <CalendarCheck size={28} /> },
@@ -2700,6 +2710,7 @@ type ArticleFormState = {
   excerptEn: string;
   coverImage: string;
   body: string;
+  blocks: ArticleBlock[];
   conclusion: string;
   category: string;
   author: string;
@@ -2707,6 +2718,20 @@ type ArticleFormState = {
   faqItems: Array<{ questionAr: string; questionEn: string; answerAr: string; answerEn: string }>;
   status: "published" | "draft";
   publishAt: string;
+};
+
+type ArticleBlockType = "paragraph" | "heading" | "image" | "video" | "divider" | "spacer";
+type ArticleBlock = {
+  id: string;
+  type: ArticleBlockType;
+  content: string;
+  metadata?: {
+    level?: 1 | 2 | 3;
+    align?: "start" | "center" | "end";
+    caption?: string;
+    alt?: string;
+    height?: number;
+  };
 };
 
 const emptyArticleForm: ArticleFormState = {
@@ -2717,6 +2742,7 @@ const emptyArticleForm: ArticleFormState = {
   excerptEn: "",
   coverImage: "",
   body: "",
+  blocks: [{ id: "block-1", type: "paragraph", content: "", metadata: { align: "start" } }],
   conclusion: "",
   category: "Dental Implants",
   author: "Dr. Amr Elshamy",
@@ -2745,6 +2771,48 @@ function parseArticleFaqItems(value?: string | null) {
   } catch {
     return empty;
   }
+}
+
+function createArticleBlock(type: ArticleBlockType = "paragraph"): ArticleBlock {
+  const base = { id: `block-${Date.now()}-${Math.random().toString(16).slice(2)}`, type, content: "" };
+  if (type === "heading") return { ...base, metadata: { level: 2, align: "start" } };
+  if (type === "spacer") return { ...base, metadata: { height: 32 } };
+  if (type === "divider") return base;
+  return { ...base, metadata: { align: "start" } };
+}
+
+function legacyBodyToBlocks(body: string): ArticleBlock[] {
+  const blocks = body.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean).map((block) => {
+    const id = `block-${Math.random().toString(16).slice(2)}`;
+    const image = block.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
+    if (image) return { id, type: "image" as const, content: image[2], metadata: { caption: image[1], alt: image[1], align: "center" as const } };
+    const video = block.match(/^\[video\]\(([^)]+)\)$/i);
+    if (video) return { id, type: "video" as const, content: video[1], metadata: { align: "center" as const } };
+    if (block.startsWith("## ")) return { id, type: "heading" as const, content: block.slice(3), metadata: { level: 2 as const, align: "start" as const } };
+    if (block === "---") return { id, type: "divider" as const, content: "" };
+    return { id, type: "paragraph" as const, content: block, metadata: { align: "start" as const } };
+  });
+  return blocks.length ? blocks : [createArticleBlock("paragraph")];
+}
+
+function parseArticleBlocks(body: string): ArticleBlock[] {
+  try {
+    const parsed = JSON.parse(body) as { blocks?: ArticleBlock[] } | ArticleBlock[];
+    const blocks = Array.isArray(parsed) ? parsed : parsed.blocks;
+    if (!Array.isArray(blocks)) return legacyBodyToBlocks(body);
+    return blocks.map((block) => ({
+      id: block.id || `block-${Math.random().toString(16).slice(2)}`,
+      type: ["paragraph", "heading", "image", "video", "divider", "spacer"].includes(block.type) ? block.type : "paragraph",
+      content: String(block.content || ""),
+      metadata: block.metadata || {},
+    }));
+  } catch {
+    return legacyBodyToBlocks(body);
+  }
+}
+
+function serializeArticleBlocks(blocks: ArticleBlock[]) {
+  return JSON.stringify({ version: 1, blocks });
 }
 
 const maxAdminUploadBytes = 2 * 1024 * 1024;
@@ -2842,6 +2910,144 @@ function isImageLikeField(key: string) {
   return /image|img|photo|logo|thumb|cover/i.test(key);
 }
 
+function BlockArticleEditor({ blocks, onChange, isArabic, setMessage }: { blocks: ArticleBlock[]; onChange: (blocks: ArticleBlock[]) => void; isArabic: boolean; setMessage: (message: string) => void }) {
+  function updateBlock(index: number, updates: Partial<ArticleBlock>) {
+    onChange(blocks.map((block, blockIndex) => blockIndex === index ? { ...block, ...updates, metadata: { ...block.metadata, ...updates.metadata } } : block));
+  }
+
+  function insertBlock(index: number, type: ArticleBlockType, after = true) {
+    const next = [...blocks];
+    next.splice(after ? index + 1 : index, 0, createArticleBlock(type));
+    onChange(next);
+  }
+
+  function moveBlock(index: number, direction: -1 | 1) {
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= blocks.length) return;
+    const next = [...blocks];
+    [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+    onChange(next);
+  }
+
+  function deleteBlock(index: number) {
+    const next = blocks.filter((_, blockIndex) => blockIndex !== index);
+    onChange(next.length ? next : [createArticleBlock("paragraph")]);
+  }
+
+  async function uploadBlockImage(index: number, file: File | undefined) {
+    const url = await uploadAdminImage(file, isArabic, setMessage);
+    if (url) updateBlock(index, { content: url });
+  }
+
+  function applyInlineFormat(index: number, format: "bold" | "italic" | "link" | "list") {
+    const block = blocks[index];
+    const content = block.content || "";
+    const additions = {
+      bold: `**${isArabic ? "نص مهم" : "Important text"}**`,
+      italic: `_${isArabic ? "نص مائل" : "Italic text"}_`,
+      link: `[${isArabic ? "نص الرابط" : "Link text"}](https://example.com)`,
+      list: `- ${isArabic ? "نقطة أولى" : "First point"}\n- ${isArabic ? "نقطة ثانية" : "Second point"}`,
+    };
+    updateBlock(index, { content: `${content}${content ? "\n" : ""}${additions[format]}` });
+  }
+
+  const addTypes: ArticleBlockType[] = ["paragraph", "heading", "image", "video", "divider", "spacer"];
+
+  return (
+    <div className="block-editor-shell">
+      <div className="block-editor-title">
+        <strong>{isArabic ? "محرر البلوكات" : "Block Editor"}</strong>
+        <span>{isArabic ? "ابني المقال من بلوكات قابلة للترتيب." : "Build the article from sortable content blocks."}</span>
+      </div>
+      <div className="block-list">
+        {blocks.map((block, index) => (
+          <article className={`content-block block-${block.type}`} key={block.id}>
+            <div className="block-floating-toolbar">
+              <button type="button" onClick={() => moveBlock(index, -1)} disabled={index === 0}>↑</button>
+              <button type="button" onClick={() => moveBlock(index, 1)} disabled={index === blocks.length - 1}>↓</button>
+              <select value={block.type} onChange={(event) => updateBlock(index, createArticleBlock(event.target.value as ArticleBlockType))}>
+                <option value="paragraph">{isArabic ? "فقرة" : "Paragraph"}</option>
+                <option value="heading">{isArabic ? "عنوان" : "Heading"}</option>
+                <option value="image">{isArabic ? "صورة" : "Image"}</option>
+                <option value="video">{isArabic ? "فيديو" : "Video"}</option>
+                <option value="divider">{isArabic ? "فاصل" : "Divider"}</option>
+                <option value="spacer">{isArabic ? "مسافة" : "Spacer"}</option>
+              </select>
+              <div className="block-plus-menu">
+                <button type="button">+</button>
+                <div>
+                  {addTypes.map((type) => <button type="button" key={type} onClick={() => insertBlock(index, type)}>{type}</button>)}
+                </div>
+              </div>
+              <button className="danger" type="button" onClick={() => deleteBlock(index)}>×</button>
+            </div>
+
+            {block.type === "heading" ? (
+              <>
+                <div className="block-inline-controls">
+                  <select value={block.metadata?.level || 2} onChange={(event) => updateBlock(index, { metadata: { level: Number(event.target.value) as 1 | 2 | 3 } })}>
+                    <option value={1}>H1</option>
+                    <option value={2}>H2</option>
+                    <option value={3}>H3</option>
+                  </select>
+                  <select value={block.metadata?.align || "start"} onChange={(event) => updateBlock(index, { metadata: { align: event.target.value as "start" | "center" | "end" } })}>
+                    <option value="start">{isArabic ? "بداية" : "Start"}</option>
+                    <option value="center">{isArabic ? "منتصف" : "Center"}</option>
+                    <option value="end">{isArabic ? "نهاية" : "End"}</option>
+                  </select>
+                </div>
+                <input className={`block-heading-input align-${block.metadata?.align || "start"}`} value={block.content} onChange={(event) => updateBlock(index, { content: event.target.value })} placeholder={isArabic ? "اكتب عنوان البلوك" : "Write a block heading"} />
+              </>
+            ) : null}
+
+            {block.type === "paragraph" ? (
+              <>
+                <div className="block-inline-controls">
+                  {(["bold", "italic", "link", "list"] as const).map((format) => <button type="button" key={format} onClick={() => applyInlineFormat(index, format)}>{format}</button>)}
+                  <select value={block.metadata?.align || "start"} onChange={(event) => updateBlock(index, { metadata: { align: event.target.value as "start" | "center" | "end" } })}>
+                    <option value="start">{isArabic ? "بداية" : "Start"}</option>
+                    <option value="center">{isArabic ? "منتصف" : "Center"}</option>
+                    <option value="end">{isArabic ? "نهاية" : "End"}</option>
+                  </select>
+                </div>
+                <textarea className={`block-paragraph-input align-${block.metadata?.align || "start"}`} value={block.content} onChange={(event) => updateBlock(index, { content: event.target.value })} placeholder={isArabic ? "اكتب فقرة المقال هنا" : "Write article paragraph here"} />
+              </>
+            ) : null}
+
+            {block.type === "image" ? (
+              <div className="block-media-editor">
+                {block.content ? <img src={block.content} alt={block.metadata?.alt || ""} /> : <div className="block-media-placeholder"><ImageIcon size={26} /></div>}
+                <AdminImageUrlField label={isArabic ? "رابط/رفع الصورة" : "Image upload / URL"} value={block.content} onChange={(value) => updateBlock(index, { content: value })} isArabic={isArabic} />
+                <input value={block.metadata?.caption || ""} onChange={(event) => updateBlock(index, { metadata: { caption: event.target.value } })} placeholder={isArabic ? "Caption الصورة" : "Image caption"} />
+                <input value={block.metadata?.alt || ""} onChange={(event) => updateBlock(index, { metadata: { alt: event.target.value } })} placeholder={isArabic ? "Alt text" : "Alt text"} />
+                <input type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={(event) => void uploadBlockImage(index, event.target.files?.[0])} />
+              </div>
+            ) : null}
+
+            {block.type === "video" ? (
+              <div className="block-media-editor">
+                <input value={block.content} onChange={(event) => updateBlock(index, { content: event.target.value })} placeholder="YouTube / Vimeo URL" />
+                {block.content ? <div className="article-video-embed"><iframe src={videoEmbedUrl(block.content)} title="Video preview" loading="lazy" allowFullScreen /></div> : null}
+              </div>
+            ) : null}
+
+            {block.type === "divider" ? <hr className="block-divider-preview" /> : null}
+            {block.type === "spacer" ? (
+              <label className="block-spacer-control">
+                <span>{isArabic ? "ارتفاع المسافة" : "Spacer height"}</span>
+                <input type="range" min={16} max={120} value={block.metadata?.height || 32} onChange={(event) => updateBlock(index, { metadata: { height: Number(event.target.value) } })} />
+              </label>
+            ) : null}
+          </article>
+        ))}
+      </div>
+      <div className="block-editor-add-row">
+        {addTypes.map((type) => <button type="button" key={type} onClick={() => insertBlock(blocks.length - 1, type)}>{isArabic ? `إضافة ${type}` : `Add ${type}`}</button>)}
+      </div>
+    </div>
+  );
+}
+
 function ArticlesManager({ isArabic, onStatsChange }: { isArabic: boolean; onStatsChange: () => Promise<void> }) {
   const [items, setItems] = useState<AdminArticle[]>([]);
   const [search, setSearch] = useState("");
@@ -2879,10 +3085,11 @@ function ArticlesManager({ isArabic, onStatsChange }: { isArabic: boolean; onSta
   async function submitArticle(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
+    const articlePayload = { ...form, body: serializeArticleBlocks(form.blocks) };
     const response = await fetch("/api/admin/articles", {
       method: form.id ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify(articlePayload),
     });
 
     if (response.ok) {
@@ -2919,6 +3126,7 @@ function ArticlesManager({ isArabic, onStatsChange }: { isArabic: boolean; onSta
       excerptEn: article.excerpt_en || "",
       coverImage: article.cover_image || "",
       body: article.body,
+      blocks: parseArticleBlocks(article.body),
       conclusion: article.conclusion,
       category: article.category || "Dental Implants",
       author: article.author || "Dr. Amr Elshamy",
@@ -2940,6 +3148,7 @@ function ArticlesManager({ isArabic, onStatsChange }: { isArabic: boolean; onSta
     setForm((current) => ({
       ...current,
       body: `${current.body}${current.body.trim() ? "\n\n" : ""}${snippet}`,
+      blocks: [...current.blocks, { ...createArticleBlock(snippet.startsWith("##") ? "heading" : snippet.startsWith("[video]") ? "video" : "paragraph"), content: snippet.replace(/^##\s*/, "").replace(/^\[video\]\(([^)]+)\)$/i, "$1") }],
     }));
   }
 
@@ -3077,24 +3286,12 @@ function ArticlesManager({ isArabic, onStatsChange }: { isArabic: boolean; onSta
               </div>
             </div>
           ) : null}
-          <div className="article-editor-section main-body">
-            <strong>{isArabic ? "2. المقالة" : "2. Article Body"}</strong>
-            <div className="article-rich-toolbar" aria-label={isArabic ? "أدوات تحرير المقال" : "Article editing tools"}>
-              {richTools.map((tool) => (
-                <button type="button" key={tool.label} onClick={() => appendToArticleBody(tool.snippet)}>
-                  {tool.label}
-                </button>
-              ))}
-              <label>
-                <span>{isArabic ? "صورة داخل المقال" : "Inline image"}</span>
-                <input type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={(event) => void handleArticleImageUpload(event.target.files?.[0])} />
-              </label>
-            </div>
-            <label>
-              <span>{isArabic ? "اكتب المقالة كاملة" : "Write the full article"}</span>
-              <textarea required value={form.body} onChange={(event) => setForm({ ...form, body: event.target.value })} placeholder={isArabic ? "اكتب كل فقرة في سطر مستقل أو افصل بين الفقرات بسطر فارغ." : "Write each paragraph on its own line, or separate paragraphs with an empty line."} />
-            </label>
-          </div>
+          <BlockArticleEditor
+            blocks={form.blocks}
+            isArabic={isArabic}
+            setMessage={setMessage}
+            onChange={(blocks) => setForm((current) => ({ ...current, blocks, body: serializeArticleBlocks(blocks) }))}
+          />
           <div className="article-editor-section article-footer-editor">
             <strong>{isArabic ? "3. فوتر المقالة" : "3. Article Footer"}</strong>
             <label>
@@ -3147,7 +3344,7 @@ function ArticlePreviewModal({ form, isArabic, onClose }: { form: ArticleFormSta
         {form.metaDescription ? <p className="article-summary">{form.metaDescription}</p> : null}
         {form.coverImage ? <img className="article-detail-cover" src={form.coverImage} alt="" /> : null}
         <div className="article-content">
-          {renderArticleContent(form.body || (isArabic ? "محتوى المقال سيظهر هنا." : "Article content will appear here."))}
+          {renderArticleContent(serializeArticleBlocks(form.blocks))}
         </div>
         {form.conclusion ? (
           <footer className="article-footer-note">
@@ -3161,11 +3358,13 @@ function ArticlePreviewModal({ form, isArabic, onClose }: { form: ArticleFormSta
 }
 
 function renderInlineArticleText(text: string) {
-  const pattern = /(\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\))/g;
+  const pattern = /(\*\*[^*]+\*\*|_[^_]+_|\[[^\]]+\]\([^)]+\))/g;
   const parts = text.split(pattern).filter(Boolean);
   return parts.map((part, index) => {
     const bold = part.match(/^\*\*([^*]+)\*\*$/);
     if (bold) return <strong key={`${part}-${index}`}>{bold[1]}</strong>;
+    const italic = part.match(/^_([^_]+)_$/);
+    if (italic) return <em key={`${part}-${index}`}>{italic[1]}</em>;
     const link = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
     if (link) return <a href={link[2]} target="_blank" rel="noreferrer" key={`${part}-${index}`}>{link[1]}</a>;
     return <span key={`${part}-${index}`}>{part}</span>;
@@ -3188,6 +3387,11 @@ function videoEmbedUrl(url: string) {
 }
 
 function renderArticleContent(body: string) {
+  const maybeBlocks = parseArticleBlocks(body);
+  if (body.trim().startsWith("{") || body.trim().startsWith("[")) {
+    return maybeBlocks.map((block) => renderArticleBlock(block));
+  }
+
   const blocks = body.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
   return blocks.map((block, index) => {
     const video = block.match(/^\[video\]\(([^)]+)\)$/i);
@@ -3228,6 +3432,39 @@ function renderArticleContent(body: string) {
 
     return <p key={`${block}-${index}`}>{renderInlineArticleText(block)}</p>;
   });
+}
+
+function renderArticleBlock(block: ArticleBlock) {
+  const alignClass = `align-${block.metadata?.align || "start"}`;
+  if (block.type === "heading") {
+    const level = block.metadata?.level || 2;
+    if (level === 1) return <h1 className={alignClass} key={block.id}>{renderInlineArticleText(block.content)}</h1>;
+    if (level === 3) return <h3 className={alignClass} key={block.id}>{renderInlineArticleText(block.content)}</h3>;
+    return <h2 className={alignClass} key={block.id}>{renderInlineArticleText(block.content)}</h2>;
+  }
+  if (block.type === "image") {
+    return (
+      <figure className="article-inline-image" key={block.id}>
+        <img src={block.content} alt={block.metadata?.alt || block.metadata?.caption || ""} loading="lazy" />
+        {block.metadata?.caption ? <figcaption>{block.metadata.caption}</figcaption> : null}
+      </figure>
+    );
+  }
+  if (block.type === "video") {
+    return (
+      <div className="article-video-embed" key={block.id}>
+        <iframe src={videoEmbedUrl(block.content)} title="Article video" loading="lazy" allowFullScreen />
+      </div>
+    );
+  }
+  if (block.type === "divider") return <hr className="article-divider" key={block.id} />;
+  if (block.type === "spacer") return <div className="article-spacer" style={{ height: block.metadata?.height || 32 }} key={block.id} />;
+
+  const lines = block.content.split("\n").map((line) => line.trim()).filter(Boolean);
+  if (lines.length && lines.every((line) => line.startsWith("- "))) {
+    return <ul className={alignClass} key={block.id}>{lines.map((line) => <li key={line}>{renderInlineArticleText(line.slice(2))}</li>)}</ul>;
+  }
+  return <p className={alignClass} key={block.id}>{renderInlineArticleText(block.content)}</p>;
 }
 
 type AdminReview = {
@@ -4863,6 +5100,7 @@ type MediaItem = { id: number; url: string; alt?: string; category: string; crea
 function MediaManager({ isArabic }: { isArabic: boolean }) {
   const [items, setItems] = useState<MediaItem[]>([]);
   const [message, setMessage] = useState("");
+  const [dragging, setDragging] = useState(false);
 
   async function load() {
     const response = await fetch("/api/admin/media?pageSize=25");
@@ -4880,6 +5118,24 @@ function MediaManager({ isArabic }: { isArabic: boolean }) {
     await load();
   }
 
+  async function uploadMany(files: FileList | File[]) {
+    const selected = Array.from(files).filter((file) => allowedAdminImageTypes.includes(file.type));
+    for (const file of selected) {
+      const url = await uploadAdminImage(file, isArabic, setMessage);
+      if (url) {
+        await fetch("/api/admin/media", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url, alt: file.name.replace(/\.[^.]+$/, ""), category: "library" }) });
+      }
+    }
+    await load();
+    setDragging(false);
+  }
+
+  async function update(item: MediaItem, updates: Partial<MediaItem>) {
+    const next = { ...item, ...updates };
+    await fetch("/api/admin/media", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(next) });
+    setItems((current) => current.map((entry) => entry.id === item.id ? next : entry));
+  }
+
   async function remove(id: number) {
     await fetch(`/api/admin/media?id=${id}`, { method: "DELETE" });
     await load();
@@ -4888,13 +5144,32 @@ function MediaManager({ isArabic }: { isArabic: boolean }) {
   return (
     <section className="admin-editor-card admin-settings-card">
       <h3>{isArabic ? "مكتبة صور الموقع" : "Media Library"}</h3>
-      <label className="admin-file-field"><span>{isArabic ? "رفع صورة جديدة" : "Upload new image"}</span><input type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={(event) => void upload(event.target.files?.[0])} /></label>
+      <div
+        className={dragging ? "media-drop-zone dragging" : "media-drop-zone"}
+        onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(event) => { event.preventDefault(); void uploadMany(event.dataTransfer.files); }}
+      >
+        <ImageIcon size={28} />
+        <strong>{isArabic ? "اسحب الصور هنا" : "Drop images here"}</strong>
+        <span>{isArabic ? "رفع جماعي مع ضغط وواترمارك تلقائي" : "Bulk upload with automatic compression and watermark"}</span>
+        <label><input multiple type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={(event) => event.target.files ? void uploadMany(event.target.files) : undefined} />{isArabic ? "اختيار صور" : "Choose images"}</label>
+      </div>
+      <label className="admin-file-field"><span>{isArabic ? "رفع صورة واحدة" : "Upload one image"}</span><input type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={(event) => void upload(event.target.files?.[0])} /></label>
       {message ? <p className="admin-form-message">{message}</p> : null}
       <div className="admin-media-grid">
         {items.map((item) => (
           <article key={item.id}>
             <img src={item.url} alt={item.alt || ""} loading="lazy" />
             <input readOnly value={item.url} onFocus={(event) => event.currentTarget.select()} />
+            <input value={item.alt || ""} onChange={(event) => void update(item, { alt: event.target.value })} placeholder="Alt text" />
+            <select value={item.category} onChange={(event) => void update(item, { category: event.target.value })}>
+              <option value="library">Library</option>
+              <option value="hero">Hero</option>
+              <option value="article">Article</option>
+              <option value="cases">Cases</option>
+              <option value="clinic">Clinic</option>
+            </select>
             <div className="admin-row-actions">
               <button type="button" onClick={() => void navigator.clipboard.writeText(item.url)}>{isArabic ? "نسخ الرابط" : "Copy URL"}</button>
               <button className="danger" type="button" onClick={() => void remove(item.id)}>{isArabic ? "حذف" : "Delete"}</button>
