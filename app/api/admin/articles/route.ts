@@ -5,9 +5,15 @@ type ArticleRow = {
   title: string;
   slug: string;
   meta_description?: string | null;
+  excerpt_ar?: string | null;
+  excerpt_en?: string | null;
   cover_image?: string | null;
   body: string;
   conclusion: string;
+  category?: string | null;
+  author?: string | null;
+  featured?: number | null;
+  faq_items?: string | null;
   status: string;
   created_at: string;
   updated_at?: string | null;
@@ -36,7 +42,7 @@ export async function GET(request: Request) {
       .first<{ count: number }>();
     const rows = await db
       .prepare(
-        `SELECT id, title, slug, meta_description, cover_image, body, conclusion, status, created_at, updated_at, publish_at
+        `SELECT id, title, slug, meta_description, excerpt_ar, excerpt_en, cover_image, body, conclusion, category, author, featured, faq_items, status, created_at, updated_at, publish_at
          FROM articles
          WHERE title LIKE ? ESCAPE '\\' ${statusClause}
          ORDER BY id DESC
@@ -71,8 +77,8 @@ export async function POST(request: Request) {
     const db = await getDb();
     const slug = await uniqueArticleSlug(db, article.slug || article.title);
     await db
-      .prepare("INSERT INTO articles (title, slug, meta_description, cover_image, body, conclusion, status, publish_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .bind(article.title, slug, article.metaDescription, article.coverImage, article.body, article.conclusion, article.status, article.publishAt, now, now)
+      .prepare("INSERT INTO articles (title, slug, meta_description, excerpt_ar, excerpt_en, cover_image, body, conclusion, category, author, featured, faq_items, status, publish_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind(article.title, slug, article.metaDescription, article.excerptAr, article.excerptEn, article.coverImage, article.body, article.conclusion, article.category, article.author, article.featured, article.faqItems, article.status, article.publishAt || now, now, now)
       .run();
     await logActivity(db, "created", "article", slug, { title: article.title });
 
@@ -98,8 +104,8 @@ export async function PUT(request: Request) {
     const db = await getDb();
     const slug = await uniqueArticleSlug(db, article.slug || article.title, id);
     await db
-      .prepare("UPDATE articles SET title = ?, slug = ?, meta_description = ?, cover_image = ?, body = ?, conclusion = ?, status = ?, publish_at = ?, updated_at = ? WHERE id = ?")
-      .bind(article.title, slug, article.metaDescription, article.coverImage, article.body, article.conclusion, article.status, article.publishAt, new Date().toISOString(), id)
+      .prepare("UPDATE articles SET title = ?, slug = ?, meta_description = ?, excerpt_ar = ?, excerpt_en = ?, cover_image = ?, body = ?, conclusion = ?, category = ?, author = ?, featured = ?, faq_items = ?, status = ?, publish_at = ?, updated_at = ? WHERE id = ?")
+      .bind(article.title, slug, article.metaDescription, article.excerptAr, article.excerptEn, article.coverImage, article.body, article.conclusion, article.category, article.author, article.featured, article.faqItems, article.status, article.publishAt || new Date().toISOString(), new Date().toISOString(), id)
       .run();
     await logActivity(db, "updated", "article", id, { title: article.title });
 

@@ -5,10 +5,15 @@ import {
   ArrowRight,
   Baby,
   CalendarCheck,
+  Check,
   ChevronRight,
   ClipboardCheck,
   ClipboardList,
+  Edit3,
+  Eye,
+  EyeOff,
   HeartHandshake,
+  ImageIcon,
   Lock,
   LogOut,
   MapPin,
@@ -23,7 +28,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { type CSSProperties, FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
+import { createContext, type CSSProperties, FormEvent, type ReactNode, useContext, useEffect, useMemo, useState } from "react";
 
 type Lang = "ar" | "en";
 type Page = "home" | "about" | "services" | "service-detail" | "cases" | "reviews" | "blog" | "contact" | "admin" | "not-found";
@@ -38,7 +43,7 @@ type ServiceSlug =
   | "oral-surgery";
 
 type Review = { id: number; name: string; rating: number; message: string; status?: string };
-type Article = { id: number; title: string; slug?: string; meta_description?: string | null; cover_image?: string | null; body: string; conclusion: string; status?: string; created_at?: string };
+type Article = { id: number; title: string; slug?: string; meta_description?: string | null; excerpt_ar?: string | null; excerpt_en?: string | null; cover_image?: string | null; body: string; conclusion: string; category?: string | null; author?: string | null; featured?: number | boolean | null; faq_items?: string | null; status?: string; created_at?: string; updated_at?: string | null; publish_at?: string | null };
 type GalleryItem = {
   id: number;
   title: string;
@@ -135,6 +140,30 @@ type SiteData = {
   doctorProfile?: DoctorProfile;
   seoPages?: Record<string, { title?: string; description?: string; ogImage?: string }>;
 };
+type AdminSessionInfo = {
+  authenticated: boolean;
+  username?: string;
+  role?: string;
+  permissions?: string[];
+  isSuperAdmin?: boolean;
+};
+type LiveEditTarget = {
+  group: "siteText" | "heroConfig" | "headerFooterConfig" | "builderConfig" | "layoutConfig" | "themeConfig";
+  field: string;
+  type?: "text" | "image";
+};
+type LiveEditContextValue = {
+  enabled: boolean;
+  save: (target: LiveEditTarget, value: string) => Promise<boolean>;
+  uploadImage: (file: File | undefined) => Promise<string>;
+  updateSection: (key: string, action: "hide" | "up" | "down") => Promise<void>;
+};
+const LiveEditContext = createContext<LiveEditContextValue>({
+  enabled: false,
+  save: async () => false,
+  uploadImage: async () => "",
+  updateSection: async () => undefined,
+});
 type ParsedCase = GalleryItem & {
   beforeImage: string;
   afterImage: string;
@@ -567,6 +596,7 @@ export function DentalSite({ page = "home", serviceSlug, article }: { page?: Pag
   const [bookingSent, setBookingSent] = useState(false);
   const [bookingOpen, setBookingOpen] = useState(false);
   const [settings, setSettings] = useState<SiteSettings>(defaultSiteSettings);
+  const [adminSession, setAdminSession] = useState<AdminSessionInfo | null>(null);
 
   const t = copy[lang];
   const isArabic = lang === "ar";
@@ -639,6 +669,13 @@ export function DentalSite({ page = "home", serviceSlug, article }: { page?: Pag
   }, []);
 
   useEffect(() => {
+    fetch("/api/admin/session")
+      .then((response) => response.ok ? response.json() : null)
+      .then((session: AdminSessionInfo | null) => setAdminSession(session))
+      .catch(() => setAdminSession(null));
+  }, []);
+
+  useEffect(() => {
     const label = page === "service-detail" && serviceSlug ? `service/${serviceSlug}` : page === "blog" && article?.slug ? `blog/${article.slug}` : page;
     fetch("/api/track-event", {
       method: "POST",
@@ -694,8 +731,77 @@ export function DentalSite({ page = "home", serviceSlug, article }: { page?: Pag
     }
   }
 
+  function updateLocalConfig(target: LiveEditTarget, value: string) {
+    setData((current) => {
+      const currentGroup = ((current[target.group] as Record<string, unknown> | undefined) || {});
+      const nextGroup = { ...currentGroup };
+      const parts = target.field.split(".").filter(Boolean);
+      let cursor: Record<string, unknown> = nextGroup;
+      for (const part of parts.slice(0, -1)) {
+        const child = cursor[part];
+        cursor[part] = child && typeof child === "object" && !Array.isArray(child) ? { ...(child as Record<string, unknown>) } : {};
+        cursor = cursor[part] as Record<string, unknown>;
+      }
+      cursor[parts[parts.length - 1]] = value;
+      return { ...current, [target.group]: nextGroup };
+    });
+  }
+
+  async function saveLiveEdit(target: LiveEditTarget, value: string) {
+    const response = await fetch("/api/admin/live-edit", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ group: target.group, key: target.field, value, type: target.type || "text" }),
+    });
+    if (response.ok) {
+      updateLocalConfig(target, value);
+      return true;
+    }
+    return false;
+  }
+
+  async function uploadLiveImage(file: File | undefined) {
+    return uploadAdminImage(file, isArabic, () => undefined);
+  }
+
+  async function updateLiveSection(key: string, action: "hide" | "up" | "down") {
+    const defaultSectionOrder = ["hero", "stats", "trust", "implant", "journey", "quiz", "preview", "comfort", "services", "reviews"];
+    const currentLayout = data.layoutConfig || {};
+    const sections = [...(currentLayout.sections?.length ? currentLayout.sections : defaultSectionOrder)];
+    const hiddenSections = new Set(currentLayout.hiddenSections || []);
+    if (action === "hide") {
+      hiddenSections.has(key) ? hiddenSections.delete(key) : hiddenSections.add(key);
+    } else {
+      const index = sections.indexOf(key);
+      const nextIndex = action === "up" ? index - 1 : index + 1;
+      if (index >= 0 && nextIndex >= 0 && nextIndex < sections.length) {
+        [sections[index], sections[nextIndex]] = [sections[nextIndex], sections[index]];
+      }
+    }
+    const nextLayout = { ...currentLayout, sections, hiddenSections: Array.from(hiddenSections) };
+    setData((current) => ({ ...current, layoutConfig: nextLayout }));
+    await fetch("/api/admin/live-edit", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ group: "layoutConfig", key: "sections", value: sections }),
+    });
+    await fetch("/api/admin/live-edit", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ group: "layoutConfig", key: "hiddenSections", value: Array.from(hiddenSections) }),
+    });
+  }
+
+  const liveEdit = useMemo<LiveEditContextValue>(() => ({
+    enabled: Boolean(adminSession?.isSuperAdmin && page !== "admin"),
+    save: saveLiveEdit,
+    uploadImage: uploadLiveImage,
+    updateSection: updateLiveSection,
+  }), [adminSession?.isSuperAdmin, page, data.layoutConfig, isArabic]);
+
   return (
-    <main className="site-shell">
+    <LiveEditContext.Provider value={liveEdit}>
+    <main className={liveEdit.enabled ? "site-shell live-edit-enabled" : "site-shell"}>
       <LoadingScreen />
       <SiteScripts scripts={data.scriptsConfig} />
       <SiteBanner banner={data.bannerConfig} isArabic={isArabic} />
@@ -736,6 +842,7 @@ export function DentalSite({ page = "home", serviceSlug, article }: { page?: Pag
         />
       ) : null}
     </main>
+    </LiveEditContext.Provider>
   );
 }
 
@@ -867,8 +974,8 @@ function Header({
   return (
     <header className="main-header">
       <a className="brand" href="/" aria-label="Dr. Amr Elshamy Dental Clinic">
-        <img className="brand-logo light-logo" src={logo} alt="Dr. Amr Elshamy logo" />
-        <img className="brand-logo dark-logo" src={logo} alt="Dr. Amr Elshamy logo" />
+        <LiveEditableImage target={{ group: "headerFooterConfig", field: "logo", type: "image" }} className="brand-logo light-logo" src={logo} alt="Dr. Amr Elshamy logo" />
+        <LiveEditableImage target={{ group: "headerFooterConfig", field: "logo", type: "image" }} className="brand-logo dark-logo" src={logo} alt="Dr. Amr Elshamy logo" />
       </a>
 
       <nav className={menuOpen ? "nav open" : "nav"} aria-label="Primary navigation">
@@ -906,7 +1013,7 @@ function Header({
             <span className="theme-state light-state">L</span>
             <span className="theme-state dark-state">D</span>
             <span className="theme-thumb">
-              <ToothToggleIcon />
+              {dark ? "🌙" : "☀️"}
             </span>
           </span>
         </button>
@@ -972,21 +1079,20 @@ function HomePage({ t, isArabic, data, onBook }: { t: (typeof copy)[Lang]; isAra
     if (isHidden(key)) return null;
     if (key === "hero") {
       return (
-        <section className="hero-section" key={key}>
-          <img className="hero-teeth-shape" src={hero.teethImage || "/brand/dental-implant-cutout.png"} alt="" aria-hidden="true" />
+        <EditableSection id={key} label={isArabic ? "الهيرو" : "Hero"} key={key}>
+        <section className="hero-section">
+          <LiveEditableImage target={{ group: "heroConfig", field: "teethImage", type: "image" }} className="hero-teeth-shape" src={hero.teethImage || "/brand/dental-implant-cutout.png"} alt="" decorative />
           <div className="hero-copy">
-            <p className="eyebrow"><Sparkles size={16} /> {isArabic ? (hero.badgeAr || t.badge) : (hero.badgeEn || t.badge)}</p>
-            <h1>{isArabic ? (hero.titleAr || t.title) : (hero.titleEn || t.title)}</h1>
+            <p className="eyebrow"><Sparkles size={16} /> <EditableText as="span" target={{ group: "heroConfig", field: isArabic ? "badgeAr" : "badgeEn" }}>{isArabic ? (hero.badgeAr || t.badge) : (hero.badgeEn || t.badge)}</EditableText></p>
+            <EditableText as="h1" target={{ group: "heroConfig", field: isArabic ? "titleAr" : "titleEn" }}>{isArabic ? (hero.titleAr || t.title) : (hero.titleEn || t.title)}</EditableText>
             <p className="lead">
-              {isArabic ? (hero.subtitleAr || (
-                <>في عيادة <strong>Dr. Amr Elshamy</strong> بنهتم براحتك من أول رسالة واتساب لحد نتيجة العلاج. خدمات أسنان للكبار والأطفال بأسلوب بسيط وودود.</>
-              )) : (hero.subtitleEn || (
-                <>At <strong>Dr. Amr Elshamy Dental Clinic</strong>, booking is simple, care is gentle, and every treatment plan is explained clearly for adults and children.</>
-              ))}
+              <EditableText as="span" target={{ group: "heroConfig", field: isArabic ? "subtitleAr" : "subtitleEn" }}>
+                {isArabic ? (hero.subtitleAr || "في عيادة Dr. Amr Elshamy بنهتم براحتك من أول رسالة واتساب لحد نتيجة العلاج. خدمات أسنان للكبار والأطفال بأسلوب بسيط وودود.") : (hero.subtitleEn || "At Dr. Amr Elshamy Dental Clinic, booking is simple, care is gentle, and every treatment plan is explained clearly for adults and children.")}
+              </EditableText>
             </p>
             <div className="hero-buttons">
-              <button className="primary-button" type="button" onClick={onBook}><CalendarCheck size={18} /> {isArabic ? (hero.primaryCtaAr || t.book) : (hero.primaryCtaEn || t.book)}</button>
-              <a className="secondary-button" href="/services">{isArabic ? (hero.secondaryCtaAr || t.servicesCta) : (hero.secondaryCtaEn || t.servicesCta)} <ChevronRight size={18} /></a>
+              <button className="primary-button" type="button" onClick={onBook}><CalendarCheck size={18} /> <EditableText as="button-label" target={{ group: "heroConfig", field: isArabic ? "primaryCtaAr" : "primaryCtaEn" }}>{isArabic ? (hero.primaryCtaAr || t.book) : (hero.primaryCtaEn || t.book)}</EditableText></button>
+              <a className="secondary-button" href="/services"><EditableText as="button-label" target={{ group: "heroConfig", field: isArabic ? "secondaryCtaAr" : "secondaryCtaEn" }}>{isArabic ? (hero.secondaryCtaAr || t.servicesCta) : (hero.secondaryCtaEn || t.servicesCta)}</EditableText> <ChevronRight size={18} /></a>
             </div>
             <div className="hero-trust-pills">
               <span><Star size={15} fill="currentColor" /> 5.0</span>
@@ -997,7 +1103,7 @@ function HomePage({ t, isArabic, data, onBook }: { t: (typeof copy)[Lang]; isAra
 
           <div className="hero-media" aria-label="Dr. Amr Elshamy portrait">
             <div className="gold-disc" />
-            <img src={hero.doctorImage || "/brand/dr-amr-hero-premium.png"} alt="Dr. Amr Elshamy" />
+            <LiveEditableImage target={{ group: "heroConfig", field: "doctorImage", type: "image" }} src={hero.doctorImage || "/brand/dr-amr-hero-premium.png"} alt="Dr. Amr Elshamy" />
             <div className="floating-card rating-card">
               <Star size={28} fill="currentColor" />
               <strong>5-Star</strong>
@@ -1005,21 +1111,23 @@ function HomePage({ t, isArabic, data, onBook }: { t: (typeof copy)[Lang]; isAra
             </div>
           </div>
         </section>
+        </EditableSection>
       );
     }
-    if (key === "stats") return <Stats key={key} t={t} hero={hero} />;
-    if (key === "trust") return <TrustBar key={key} isArabic={isArabic} builder={data.builderConfig} />;
-    if (key === "implant") return <ImplantVisualFeature key={key} isArabic={isArabic} onBook={onBook} builder={data.builderConfig} />;
-    if (key === "journey") return <SmileJourney key={key} isArabic={isArabic} builder={data.builderConfig} />;
-    if (key === "quiz") return <QuickConsultQuiz key={key} isArabic={isArabic} builder={data.builderConfig} />;
-    if (key === "preview") return <SmilePreviewCta key={key} isArabic={isArabic} builder={data.builderConfig} />;
-    if (key === "comfort") return <PatientComfortSection key={key} isArabic={isArabic} siteText={siteText} builder={data.builderConfig} />;
+    if (key === "stats") return <EditableSection id={key} label={isArabic ? "الإحصائيات" : "Stats"} key={key}><Stats t={t} hero={hero} /></EditableSection>;
+    if (key === "trust") return <EditableSection id={key} label={isArabic ? "الثقة" : "Trust"} key={key}><TrustBar isArabic={isArabic} builder={data.builderConfig} /></EditableSection>;
+    if (key === "implant") return <EditableSection id={key} label={isArabic ? "الزراعة" : "Implant"} key={key}><ImplantVisualFeature isArabic={isArabic} onBook={onBook} builder={data.builderConfig} /></EditableSection>;
+    if (key === "journey") return <EditableSection id={key} label={isArabic ? "رحلة العلاج" : "Journey"} key={key}><SmileJourney isArabic={isArabic} builder={data.builderConfig} /></EditableSection>;
+    if (key === "quiz") return <EditableSection id={key} label={isArabic ? "اختبار الحجز" : "Quiz"} key={key}><QuickConsultQuiz isArabic={isArabic} builder={data.builderConfig} /></EditableSection>;
+    if (key === "preview") return <EditableSection id={key} label={isArabic ? "معاينة الابتسامة" : "Preview"} key={key}><SmilePreviewCta isArabic={isArabic} builder={data.builderConfig} /></EditableSection>;
+    if (key === "comfort") return <EditableSection id={key} label={isArabic ? "راحة المرضى" : "Comfort"} key={key}><PatientComfortSection isArabic={isArabic} siteText={siteText} builder={data.builderConfig} /></EditableSection>;
     if (key === "services") {
       return (
-        <section className="home-showcase" id="services-preview" key={key}>
-          <p className="section-label">{siteCopy(isArabic ? "servicesLabelAr" : "servicesLabelEn", isArabic ? "خدماتنا" : "Our Services")}</p>
-          <h2>{siteCopy(isArabic ? "servicesTitleAr" : "servicesTitleEn", t.pages.services[1])}</h2>
-          <p className="section-text">{siteCopy(isArabic ? "servicesTextAr" : "servicesTextEn", t.pages.services[2])}</p>
+        <EditableSection id={key} label={isArabic ? "الخدمات" : "Services"} key={key}>
+        <section className="home-showcase" id="services-preview">
+          <p className="section-label"><EditableText as="span" target={{ group: "siteText", field: isArabic ? "servicesLabelAr" : "servicesLabelEn" }}>{siteCopy(isArabic ? "servicesLabelAr" : "servicesLabelEn", isArabic ? "خدماتنا" : "Our Services")}</EditableText></p>
+          <EditableText as="h2" target={{ group: "siteText", field: isArabic ? "servicesTitleAr" : "servicesTitleEn" }}>{siteCopy(isArabic ? "servicesTitleAr" : "servicesTitleEn", t.pages.services[1])}</EditableText>
+          <p className="section-text"><EditableText as="span" target={{ group: "siteText", field: isArabic ? "servicesTextAr" : "servicesTextEn" }}>{siteCopy(isArabic ? "servicesTextAr" : "servicesTextEn", t.pages.services[2])}</EditableText></p>
           <div className="showcase-frame">
             <button className="round-arrow prev-arrow" type="button" aria-label={isArabic ? "الخدمات السابقة" : "Previous services"} onClick={() => moveServices("prev")}>
               <ArrowRight size={24} strokeWidth={2.6} aria-hidden="true" />
@@ -1039,15 +1147,17 @@ function HomePage({ t, isArabic, data, onBook }: { t: (typeof copy)[Lang]; isAra
             </button>
           </div>
         </section>
+        </EditableSection>
       );
     }
     if (key === "reviews") {
       return (
-        <section className="home-showcase reviews-showcase" id="reviews-preview" key={key}>
-          <p className="section-label">{siteCopy(isArabic ? "reviewsLabelAr" : "reviewsLabelEn", isArabic ? "آراء المرضى" : "Testimonials")}</p>
-          <h2>{siteCopy(isArabic ? "reviewsTitleAr" : "reviewsTitleEn", t.pages.reviews[1])}</h2>
+        <EditableSection id={key} label={isArabic ? "آراء المرضى" : "Reviews"} key={key}>
+        <section className="home-showcase reviews-showcase" id="reviews-preview">
+          <p className="section-label"><EditableText as="span" target={{ group: "siteText", field: isArabic ? "reviewsLabelAr" : "reviewsLabelEn" }}>{siteCopy(isArabic ? "reviewsLabelAr" : "reviewsLabelEn", isArabic ? "آراء المرضى" : "Testimonials")}</EditableText></p>
+          <EditableText as="h2" target={{ group: "siteText", field: isArabic ? "reviewsTitleAr" : "reviewsTitleEn" }}>{siteCopy(isArabic ? "reviewsTitleAr" : "reviewsTitleEn", t.pages.reviews[1])}</EditableText>
           <p className="section-text">
-            {siteCopy(isArabic ? "reviewsTextAr" : "reviewsTextEn", isArabic ? "مختارات حقيقية من آراء المرضى، وتقدر تشوف باقي التجارب كاملة في صفحة آراء المرضى." : "Real patient highlights from the reviews page. Open the full page to explore more experiences.")}
+            <EditableText as="span" target={{ group: "siteText", field: isArabic ? "reviewsTextAr" : "reviewsTextEn" }}>{siteCopy(isArabic ? "reviewsTextAr" : "reviewsTextEn", isArabic ? "مختارات حقيقية من آراء المرضى، وتقدر تشوف باقي التجارب كاملة في صفحة آراء المرضى." : "Real patient highlights from the reviews page. Open the full page to explore more experiences.")}</EditableText>
           </p>
           <div className="review-grid home-review-grid">
             {featuredReviews.map((item) => (
@@ -1064,10 +1174,11 @@ function HomePage({ t, isArabic, data, onBook }: { t: (typeof copy)[Lang]; isAra
           </div>
           <div className="home-review-actions">
             <a className="secondary-button" href="/reviews">
-              {siteCopy(isArabic ? "reviewsButtonAr" : "reviewsButtonEn", isArabic ? "شوف باقي آراء المرضى" : "See More Patient Reviews")} <ChevronRight size={18} />
+              <EditableText as="button-label" target={{ group: "siteText", field: isArabic ? "reviewsButtonAr" : "reviewsButtonEn" }}>{siteCopy(isArabic ? "reviewsButtonAr" : "reviewsButtonEn", isArabic ? "شوف باقي آراء المرضى" : "See More Patient Reviews")}</EditableText> <ChevronRight size={18} />
             </a>
           </div>
         </section>
+        </EditableSection>
       );
     }
     return null;
@@ -1093,6 +1204,86 @@ function PageIntro({ page, t, isArabic, siteText = {} }: { page: Page; t: (typeo
       <h1>{title}</h1>
       <p>{description}</p>
     </section>
+  );
+}
+
+function EditableText({ target, children, className, as = "span" }: { target: LiveEditTarget; children: ReactNode; className?: string; as?: "span" | "p" | "h1" | "h2" | "h3" | "strong" | "button-label" }) {
+  const live = useContext(LiveEditContext);
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState("");
+  const Tag = as === "button-label" ? "span" : as;
+
+  useEffect(() => {
+    setValue(typeof children === "string" ? children : "");
+  }, [children]);
+
+  async function save() {
+    if (!editing) return;
+    setEditing(false);
+    if (value.trim()) await live.save(target, value);
+  }
+
+  if (!live.enabled) return <Tag className={className}>{children}</Tag>;
+
+  return (
+    <Tag
+      className={className ? `${className} live-edit-text` : "live-edit-text"}
+      contentEditable={editing}
+      suppressContentEditableWarning
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setEditing(true);
+      }}
+      onInput={(event) => setValue(event.currentTarget.textContent || "")}
+      onBlur={() => void save()}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          void save();
+        }
+      }}
+      data-live-edit="text"
+    >
+      {editing ? value : children}
+      <Edit3 className="live-edit-pencil" size={15} aria-hidden="true" />
+    </Tag>
+  );
+}
+
+function LiveEditableImage({ target, src, alt, className, loading, decorative }: { target: LiveEditTarget; src: string; alt: string; className?: string; loading?: "lazy" | "eager"; decorative?: boolean }) {
+  const live = useContext(LiveEditContext);
+
+  async function pick(file: File | undefined) {
+    const url = await live.uploadImage(file);
+    if (url) await live.save({ ...target, type: "image" }, url);
+  }
+
+  if (!live.enabled) return <img className={className} src={src} alt={alt} loading={loading} aria-hidden={decorative ? "true" : undefined} />;
+
+  return (
+    <label className="live-edit-image" data-live-edit="image">
+      <img className={className} src={src} alt={alt} loading={loading} aria-hidden={decorative ? "true" : undefined} />
+      <input type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={(event) => void pick(event.target.files?.[0])} />
+      <span><ImageIcon size={15} /> تغيير</span>
+    </label>
+  );
+}
+
+function EditableSection({ id, label, children }: { id: string; label: string; children: ReactNode }) {
+  const live = useContext(LiveEditContext);
+  if (!live.enabled) return <>{children}</>;
+
+  return (
+    <div className="live-edit-section" data-section={id}>
+      <div className="live-section-toolbar" onClick={(event) => event.stopPropagation()}>
+        <strong>{label}</strong>
+        <button type="button" aria-label="Move section up" onClick={() => void live.updateSection(id, "up")}>↑</button>
+        <button type="button" aria-label="Move section down" onClick={() => void live.updateSection(id, "down")}>↓</button>
+        <button type="button" aria-label="Hide section" onClick={() => void live.updateSection(id, "hide")}><EyeOff size={15} /></button>
+      </div>
+      {children}
+    </div>
   );
 }
 
@@ -1813,6 +2004,8 @@ function FaqBlock({ items, isArabic }: { items: FaqItem[]; isArabic: boolean }) 
 function ArticleDetailPage({ article, isArabic, builder }: { article: Article; isArabic: boolean; builder?: BuilderConfig }) {
   const [shareMessage, setShareMessage] = useState("");
   const labels = builder?.articleLabels || {};
+  const articleFaqs = parseArticleFaqItems(article.faq_items).filter((item) => item.questionAr || item.questionEn || item.answerAr || item.answerEn);
+  const displayExcerpt = isArabic ? (article.excerpt_ar || article.meta_description) : (article.excerpt_en || article.excerpt_ar || article.meta_description);
 
   async function shareArticle() {
     const url = typeof window !== "undefined" ? window.location.href : `/blog/${article.slug}`;
@@ -1838,16 +2031,35 @@ function ArticleDetailPage({ article, isArabic, builder }: { article: Article; i
       <div className="article-detail-body">
         <p className="section-label">{isArabic ? (labels.detailLabelAr || "مقال تثقيفي") : (labels.detailLabelEn || "Patient Education")}</p>
         <h1>{article.title}</h1>
-        {article.meta_description ? <p className="article-summary">{article.meta_description}</p> : null}
+        <div className="article-meta-row">
+          <span>{article.category || (isArabic ? "نصائح العيادة" : "Clinic Tips")}</span>
+          <span>{article.author || "Dr. Amr Elshamy"}</span>
+          <span>{article.updated_at ? new Date(article.updated_at).toLocaleDateString(isArabic ? "ar-EG" : "en-US") : ""}</span>
+        </div>
+        {displayExcerpt ? <p className="article-summary">{displayExcerpt}</p> : null}
         <div className="article-content">
           {renderArticleContent(article.body)}
         </div>
+        {articleFaqs.length ? (
+          <div className="article-faq-inline">
+            <p className="section-label">FAQ</p>
+            {articleFaqs.map((faq, index) => (
+              <details key={`${faq.questionAr || faq.questionEn}-${index}`}>
+                <summary>{isArabic ? (faq.questionAr || faq.questionEn) : (faq.questionEn || faq.questionAr)}</summary>
+                <p>{isArabic ? (faq.answerAr || faq.answerEn) : (faq.answerEn || faq.answerAr)}</p>
+              </details>
+            ))}
+          </div>
+        ) : null}
         {article.conclusion ? (
           <footer className="article-footer-note">
             <span>{isArabic ? (labels.footerLabelAr || "فوتر المقال") : (labels.footerLabelEn || "Article Footer")}</span>
             <strong>{article.conclusion}</strong>
           </footer>
         ) : null}
+        <a className="primary-button article-book-button" href={whatsappLink(isArabic ? "مرحباً، قرأت مقال على الموقع وعايز أحجز استشارة." : "Hello, I read an article on the website and would like to book a consultation.", defaultSiteSettings.whatsappPhone)} target="_blank" rel="noreferrer">
+          {isArabic ? "احجز استشارة الآن" : "Book a Consultation"}
+        </a>
         <button className="secondary-button article-share-button" type="button" onClick={() => void shareArticle()}>
           {isArabic ? (labels.shareAr || "مشاركة المقال") : (labels.shareEn || "Share Article")} <ChevronRight size={16} />
         </button>
@@ -2118,13 +2330,23 @@ function AdminPage({ lang, t }: { lang: Lang; t: (typeof copy)[Lang] }) {
   const [loggedIn, setLoggedIn] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [activeView, setActiveView] = useState<AdminView>("home");
+  const [session, setSession] = useState<AdminSessionInfo | null>(null);
   const [previewTick, setPreviewTick] = useState(0);
   const [stats, setStats] = useState({ totalVisitors: 0, publishedArticles: 0, pendingReviews: 0, draftArticles: 0, newBookings: 0, alerts: [] as string[] });
   const [adminError, setAdminError] = useState("");
   const previewPath = adminPreviewPath(activeView);
 
   async function loadDashboard() {
-    const response = await fetch("/api/admin/dashboard");
+    const [response, sessionResponse] = await Promise.all([
+      fetch("/api/admin/dashboard"),
+      fetch("/api/admin/session"),
+    ]);
+    if (sessionResponse.ok) {
+      const nextSession = await sessionResponse.json() as AdminSessionInfo;
+      setSession(nextSession);
+      const allowed = allowedAdminViews(nextSession);
+      if (!allowed.includes(activeView)) setActiveView(allowed[0] || "home");
+    }
     if (response.ok) {
       setStats(await response.json());
       setAdminError("");
@@ -2204,7 +2426,7 @@ function AdminPage({ lang, t }: { lang: Lang; t: (typeof copy)[Lang] }) {
 
   return (
     <section className="admin-page admin-dashboard-shell">
-      <AdminSidebar activeView={activeView} isArabic={isArabic} onNavigate={setActiveView} onLogout={logout} />
+      <AdminSidebar activeView={activeView} isArabic={isArabic} session={session} onNavigate={setActiveView} onLogout={logout} />
       <main className="admin-main-panel">
         <header className="admin-main-header">
           <div>
@@ -2314,14 +2536,31 @@ function adminViewTitle(view: AdminView, isArabic: boolean) {
   return isArabic ? titles[view][0] : titles[view][1];
 }
 
+function allowedAdminViews(session: AdminSessionInfo | null): AdminView[] {
+  if (!session) return ["home"];
+  if (session.isSuperAdmin || ["admin", "owner", "super-admin", "super_admin"].includes(session.role || "")) {
+    return ["home", "control", "homeContent", "doctor", "servicesManager", "articles", "reviews", "gallery", "bookings", "faq", "seo", "analytics", "media", "activity", "users", "import", "settings", "security"];
+  }
+  if (session.role === "content-writer") return ["articles"];
+  if (session.role === "moderator") return ["reviews"];
+  const permissions = new Set(session.permissions || []);
+  const mapping: Array<[AdminView, string]> = [
+    ["home", "dashboard"], ["articles", "articles"], ["reviews", "reviews"], ["gallery", "gallery"], ["servicesManager", "services"], ["media", "media"], ["settings", "settings"], ["bookings", "bookings"], ["analytics", "analytics"], ["security", "security"], ["users", "users"],
+  ];
+  const allowed = mapping.filter(([, permission]) => permissions.has(permission) || permissions.has("all")).map(([view]) => view);
+  return allowed.length ? allowed : ["home"];
+}
+
 type AdminSidebarProps = {
   activeView: AdminView;
   isArabic: boolean;
+  session: AdminSessionInfo | null;
   onNavigate: (view: AdminView) => void;
   onLogout: () => void;
 };
 
-function AdminSidebar({ activeView, isArabic, onNavigate, onLogout }: AdminSidebarProps) {
+function AdminSidebar({ activeView, isArabic, session, onNavigate, onLogout }: AdminSidebarProps) {
+  const allowedViews = new Set(allowedAdminViews(session));
   const siteLinks = [
     { key: "home" as const, label: isArabic ? "الرئيسية" : "Home", icon: <ClipboardCheck size={22} /> },
     { key: "control" as const, label: isArabic ? "مركز التحكم" : "Control", icon: <Sparkles size={22} /> },
@@ -2385,7 +2624,7 @@ function AdminSidebar({ activeView, isArabic, onNavigate, onLogout }: AdminSideb
               <ChevronRight size={17} />
             </button>
             <div className="admin-nav-group-items">
-              {group.items.map((item) => (
+              {group.items.filter((item) => allowedViews.has(item.key)).map((item) => (
                 <button className={activeView === item.key ? "active" : ""} type="button" key={item.key} onClick={() => onNavigate(item.key)}>
                   {item.icon}
                   <span>{item.label}</span>
@@ -2437,9 +2676,15 @@ type AdminArticle = {
   title: string;
   slug?: string | null;
   meta_description?: string | null;
+  excerpt_ar?: string | null;
+  excerpt_en?: string | null;
   cover_image?: string | null;
   body: string;
   conclusion: string;
+  category?: string | null;
+  author?: string | null;
+  featured?: number | boolean | null;
+  faq_items?: string | null;
   status: "published" | "draft";
   created_at?: string;
   updated_at?: string | null;
@@ -2451,9 +2696,15 @@ type ArticleFormState = {
   title: string;
   slug: string;
   metaDescription: string;
+  excerptAr: string;
+  excerptEn: string;
   coverImage: string;
   body: string;
   conclusion: string;
+  category: string;
+  author: string;
+  featured: boolean;
+  faqItems: Array<{ questionAr: string; questionEn: string; answerAr: string; answerEn: string }>;
   status: "published" | "draft";
   publishAt: string;
 };
@@ -2462,12 +2713,39 @@ const emptyArticleForm: ArticleFormState = {
   title: "",
   slug: "",
   metaDescription: "",
+  excerptAr: "",
+  excerptEn: "",
   coverImage: "",
   body: "",
   conclusion: "",
+  category: "Dental Implants",
+  author: "Dr. Amr Elshamy",
+  featured: false,
+  faqItems: [
+    { questionAr: "", questionEn: "", answerAr: "", answerEn: "" },
+    { questionAr: "", questionEn: "", answerAr: "", answerEn: "" },
+    { questionAr: "", questionEn: "", answerAr: "", answerEn: "" },
+  ],
   status: "published",
   publishAt: "",
 };
+
+function parseArticleFaqItems(value?: string | null) {
+  const empty = emptyArticleForm.faqItems.map((item) => ({ ...item }));
+  if (!value) return empty;
+  try {
+    const parsed = JSON.parse(value) as ArticleFormState["faqItems"];
+    if (!Array.isArray(parsed)) return empty;
+    return [0, 1, 2].map((index) => ({
+      questionAr: parsed[index]?.questionAr || "",
+      questionEn: parsed[index]?.questionEn || "",
+      answerAr: parsed[index]?.answerAr || "",
+      answerEn: parsed[index]?.answerEn || "",
+    }));
+  } catch {
+    return empty;
+  }
+}
 
 const maxAdminUploadBytes = 2 * 1024 * 1024;
 const allowedAdminImageTypes = ["image/jpeg", "image/png", "image/webp"];
@@ -2637,9 +2915,15 @@ function ArticlesManager({ isArabic, onStatsChange }: { isArabic: boolean; onSta
       title: article.title,
       slug: article.slug || "",
       metaDescription: article.meta_description || "",
+      excerptAr: article.excerpt_ar || article.meta_description || "",
+      excerptEn: article.excerpt_en || "",
       coverImage: article.cover_image || "",
       body: article.body,
       conclusion: article.conclusion,
+      category: article.category || "Dental Implants",
+      author: article.author || "Dr. Amr Elshamy",
+      featured: Boolean(article.featured),
+      faqItems: parseArticleFaqItems(article.faq_items),
       status: article.status === "draft" ? "draft" : "published",
       publishAt: article.publish_at || "",
     });
@@ -2671,8 +2955,16 @@ function ArticlesManager({ isArabic, onStatsChange }: { isArabic: boolean; onSta
     { label: "Bold", snippet: `**${isArabic ? "نص مهم" : "Important text"}**` },
     { label: isArabic ? "قائمة نقط" : "Bullet list", snippet: `- ${isArabic ? "نقطة أولى" : "First point"}\n- ${isArabic ? "نقطة ثانية" : "Second point"}` },
     { label: isArabic ? "رابط" : "Link", snippet: `[${isArabic ? "نص الرابط" : "Link text"}](https://example.com)` },
+    { label: isArabic ? "فيديو" : "Video", snippet: `[video](https://www.youtube.com/watch?v=VIDEO_ID)` },
     { label: isArabic ? "ملاحظة" : "Note", snippet: `> ${isArabic ? "معلومة مهمة للمريض" : "Important note for the patient"}` },
   ];
+
+  function updateFaq(index: number, key: keyof ArticleFormState["faqItems"][number], value: string) {
+    setForm((current) => ({
+      ...current,
+      faqItems: current.faqItems.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item),
+    }));
+  }
 
   return (
     <div className="admin-workspace-grid">
@@ -2741,6 +3033,37 @@ function ArticlesManager({ isArabic, onStatsChange }: { isArabic: boolean; onSta
             />
             <small className="admin-character-count">{form.metaDescription.length}/160</small>
           </label>
+          <div className="admin-quick-grid compact">
+            <label>
+              <span>{isArabic ? "وصف مختصر عربي" : "Arabic excerpt"}</span>
+              <textarea value={form.excerptAr} onChange={(event) => setForm({ ...form, excerptAr: event.target.value })} />
+            </label>
+            <label>
+              <span>{isArabic ? "وصف مختصر إنجليزي" : "English excerpt"}</span>
+              <textarea value={form.excerptEn} onChange={(event) => setForm({ ...form, excerptEn: event.target.value })} placeholder={isArabic ? "لو فاضي الموقع يستخدم العربي" : "Arabic is used when empty"} />
+            </label>
+            <label>
+              <span>{isArabic ? "التصنيف" : "Category"}</span>
+              <select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>
+                <option value="Dental Implants">{isArabic ? "زراعة الأسنان" : "Dental Implants"}</option>
+                <option value="Cosmetic">{isArabic ? "تجميل الأسنان" : "Cosmetic"}</option>
+                <option value="Root Canal">{isArabic ? "علاج العصب" : "Root Canal"}</option>
+                <option value="Pediatric">{isArabic ? "أسنان الأطفال" : "Pediatric"}</option>
+                <option value="Clinic Tips">{isArabic ? "نصائح العيادة" : "Clinic Tips"}</option>
+              </select>
+            </label>
+            <label>
+              <span>{isArabic ? "الكاتب" : "Author"}</span>
+              <select value={form.author} onChange={(event) => setForm({ ...form, author: event.target.value })}>
+                <option value="Dr. Amr Elshamy">Dr. Amr Elshamy</option>
+                <option value="Clinic">{isArabic ? "العيادة" : "Clinic"}</option>
+              </select>
+            </label>
+            <label className="admin-check">
+              <input type="checkbox" checked={form.featured} onChange={(event) => setForm({ ...form, featured: event.target.checked })} />
+              <span>{isArabic ? "مقال مميز" : "Featured article"}</span>
+            </label>
+          </div>
           <label className="admin-file-field">
             <span>{isArabic ? "صورة الغلاف فقط" : "Cover image only"}</span>
             <input type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={(event) => void handleCoverUpload(event.target.files?.[0])} />
@@ -2778,6 +3101,17 @@ function ArticlesManager({ isArabic, onStatsChange }: { isArabic: boolean; onSta
               <span>{isArabic ? "نص يظهر في آخر المقال" : "Text shown at the end of the article"}</span>
               <textarea value={form.conclusion} onChange={(event) => setForm({ ...form, conclusion: event.target.value })} placeholder={isArabic ? "مثال: لو عندك سؤال عن حالتك، احجز كشف بسيط وهنشرح لك الخطة المناسبة." : "Example: If you have a question about your case, book a checkup and we will explain the right plan."} />
             </label>
+          </div>
+          <div className="article-editor-section">
+            <strong>{isArabic ? "4. أسئلة المقال" : "4. Article FAQs"}</strong>
+            {form.faqItems.map((faq, index) => (
+              <div className="admin-quick-grid compact" key={index}>
+                <input value={faq.questionAr} onChange={(event) => updateFaq(index, "questionAr", event.target.value)} placeholder={isArabic ? `سؤال ${index + 1} عربي` : `FAQ ${index + 1} Arabic question`} />
+                <input value={faq.questionEn} onChange={(event) => updateFaq(index, "questionEn", event.target.value)} placeholder={isArabic ? `سؤال ${index + 1} إنجليزي` : `FAQ ${index + 1} English question`} />
+                <textarea value={faq.answerAr} onChange={(event) => updateFaq(index, "answerAr", event.target.value)} placeholder={isArabic ? "إجابة عربي" : "Arabic answer"} />
+                <textarea value={faq.answerEn} onChange={(event) => updateFaq(index, "answerEn", event.target.value)} placeholder={isArabic ? "إجابة إنجليزي" : "English answer"} />
+              </div>
+            ))}
           </div>
           <label>
             <span>{isArabic ? "حالة المقال" : "Article status"}</span>
@@ -2838,9 +3172,33 @@ function renderInlineArticleText(text: string) {
   });
 }
 
+function videoEmbedUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes("youtube.com")) {
+      const id = parsed.searchParams.get("v");
+      return id ? `https://www.youtube.com/embed/${id}` : url;
+    }
+    if (parsed.hostname.includes("youtu.be")) return `https://www.youtube.com/embed/${parsed.pathname.replace("/", "")}`;
+    if (parsed.hostname.includes("vimeo.com")) return `https://player.vimeo.com/video/${parsed.pathname.replace("/", "")}`;
+    return url;
+  } catch {
+    return url;
+  }
+}
+
 function renderArticleContent(body: string) {
   const blocks = body.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
   return blocks.map((block, index) => {
+    const video = block.match(/^\[video\]\(([^)]+)\)$/i);
+    if (video) {
+      return (
+        <div className="article-video-embed" key={`${video[1]}-${index}`}>
+          <iframe src={videoEmbedUrl(video[1])} title="Article video" loading="lazy" allowFullScreen />
+        </div>
+      );
+    }
+
     const image = block.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
     if (image) {
       return (
@@ -4627,7 +4985,7 @@ function UsersManager({ isArabic }: { isArabic: boolean }) {
       <section className="admin-editor-card"><h3>{isArabic ? "مستخدم لوحة التحكم" : "Admin User"}</h3><form className="admin-form admin-editor-form" onSubmit={save}>
         <input placeholder="Username" value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} />
         <input type="password" placeholder={form.id ? (isArabic ? "كلمة سر جديدة اختياري" : "Optional new password") : "Password"} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />
-        <select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}><option value="doctor">Doctor</option><option value="assistant">Assistant</option><option value="editor">Editor</option><option value="admin">Admin</option></select>
+        <select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}><option value="super-admin">Super Admin</option><option value="content-writer">Content Writer</option><option value="moderator">Moderator</option><option value="doctor">Doctor</option><option value="assistant">Assistant</option><option value="editor">Editor</option><option value="admin">Legacy Admin</option></select>
         <div className="admin-checkbox-grid">{permissionOptions.map((permission) => <label key={permission}><input type="checkbox" checked={form.permissions.includes(permission)} onChange={(event) => setForm({ ...form, permissions: event.target.checked ? [...form.permissions, permission] : form.permissions.filter((item) => item !== permission) })} /> {permission}</label>)}</div>
         <select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as "active" | "disabled" })}><option value="active">Active</option><option value="disabled">Disabled</option></select>
         {message ? <p className="admin-form-message">{message}</p> : null}<button className="primary-button" type="submit">{isArabic ? "حفظ المستخدم" : "Save User"}</button>

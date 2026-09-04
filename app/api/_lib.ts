@@ -15,10 +15,20 @@ type ArticlePayload = {
   slug?: string;
   metaDescription?: string;
   meta_description?: string;
+  excerptAr?: string;
+  excerpt_ar?: string;
+  excerptEn?: string;
+  excerpt_en?: string;
   coverImage?: string;
   cover_image?: string;
   body?: string;
   conclusion?: string;
+  category?: string;
+  author?: string;
+  featured?: boolean;
+  featuredRaw?: number;
+  faqItems?: unknown;
+  faq_items?: unknown;
   status?: string;
   publishAt?: string;
   publish_at?: string;
@@ -582,12 +592,14 @@ function permissionForRequest(request: Request) {
     faq: "articles",
     gallery: "gallery",
     import: "backup",
+    "live-edit": "settings",
     media: "media",
     password: "security",
     revalidate: "settings",
     readiness: "security",
     reviews: "reviews",
     sections: "settings",
+    session: "dashboard",
     services: "services",
     settings: "settings",
     upload: "media",
@@ -615,7 +627,9 @@ function requestOriginIsTrusted(request: Request) {
 }
 
 function hasPermission(session: AdminSession, permission: string) {
-  if (session.role === "admin" || session.role === "owner") return true;
+  if (["admin", "owner", "super-admin", "super_admin"].includes(session.role)) return true;
+  if (session.role === "content-writer") return permission === "articles" || permission === "dashboard";
+  if (session.role === "moderator") return permission === "reviews" || permission === "dashboard";
   return session.permissions.includes("all") || session.permissions.includes(permission);
 }
 
@@ -743,6 +757,13 @@ async function readAdminSession(token: string): Promise<AdminSession | null> {
   }
 }
 
+export async function getAdminSession(request: Request) {
+  if (!requestOriginIsTrusted(request)) return null;
+  const token = getCookie(request, authCookieName);
+  if (!token) return null;
+  return readAdminSession(token);
+}
+
 export async function verifyAdminToken(token: string) {
   return Boolean(await readAdminSession(token));
 }
@@ -770,10 +791,7 @@ function getCookie(request: Request, name: string) {
 }
 
 export async function isAdmin(request: Request) {
-  if (!requestOriginIsTrusted(request)) return false;
-  const token = getCookie(request, authCookieName);
-  if (!token) return false;
-  const session = await readAdminSession(token);
+  const session = await getAdminSession(request);
   return session ? hasPermission(session, permissionForRequest(request)) : false;
 }
 
@@ -900,6 +918,12 @@ async function safeSchemaUpgrade(db: AppDb) {
     "ALTER TABLE articles ADD COLUMN cover_image TEXT",
     "ALTER TABLE articles ADD COLUMN slug TEXT",
     "ALTER TABLE articles ADD COLUMN meta_description TEXT",
+    "ALTER TABLE articles ADD COLUMN excerpt_ar TEXT",
+    "ALTER TABLE articles ADD COLUMN excerpt_en TEXT",
+    "ALTER TABLE articles ADD COLUMN category TEXT",
+    "ALTER TABLE articles ADD COLUMN author TEXT",
+    "ALTER TABLE articles ADD COLUMN featured INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE articles ADD COLUMN faq_items TEXT",
     "ALTER TABLE articles ADD COLUMN updated_at TEXT",
     "ALTER TABLE articles ADD COLUMN publish_at TEXT",
     "ALTER TABLE reviews ADD COLUMN updated_at TEXT",
@@ -1005,13 +1029,31 @@ export function normalizeReview(payload: ReviewPayload) {
 
 export function normalizeArticle(payload: ArticlePayload) {
   const rawMeta = payload.metaDescription ?? payload.meta_description ?? "";
+  const faqSource = payload.faqItems ?? payload.faq_items ?? [];
+  const faqItems = Array.isArray(faqSource)
+    ? faqSource.slice(0, 3).map((item) => {
+      const record = item && typeof item === "object" ? item as Record<string, unknown> : {};
+      return {
+        questionAr: String(record.questionAr || record.question_ar || "").trim().slice(0, 220),
+        questionEn: String(record.questionEn || record.question_en || "").trim().slice(0, 220),
+        answerAr: String(record.answerAr || record.answer_ar || "").trim().slice(0, 1000),
+        answerEn: String(record.answerEn || record.answer_en || "").trim().slice(0, 1000),
+      };
+    }).filter((item) => item.questionAr || item.questionEn || item.answerAr || item.answerEn)
+    : [];
   return {
     title: String(payload.title || "").trim().slice(0, 140),
     slug: slugifyArticleTitle(String(payload.slug || payload.title || "")),
     metaDescription: String(rawMeta).trim().slice(0, 160),
+    excerptAr: String(payload.excerptAr || payload.excerpt_ar || rawMeta || "").trim().slice(0, 260),
+    excerptEn: String(payload.excerptEn || payload.excerpt_en || "").trim().slice(0, 260),
     coverImage: String(payload.coverImage || payload.cover_image || "").trim().slice(0, 500),
     body: String(payload.body || "").trim().slice(0, 20000),
     conclusion: String(payload.conclusion || "").trim().slice(0, 2000),
+    category: String(payload.category || "Dental Care").trim().slice(0, 80),
+    author: String(payload.author || "Clinic").trim().slice(0, 120),
+    featured: payload.featuredRaw === 1 || Boolean(payload.featured) ? 1 : 0,
+    faqItems: JSON.stringify(faqItems),
     publishAt: String(payload.publishAt || payload.publish_at || "").trim().slice(0, 50),
     status: payload.status === "draft" ? "draft" : "published",
   };
@@ -1142,7 +1184,7 @@ export function normalizeUser(payload: UserPayload) {
   return {
     username: String(payload.username || "").trim().slice(0, 80),
     password: String(payload.password || "").slice(0, 200),
-    role: ["admin", "doctor", "assistant", "editor"].includes(String(payload.role)) ? String(payload.role) : "assistant",
+    role: ["admin", "super-admin", "content-writer", "moderator", "doctor", "assistant", "editor"].includes(String(payload.role)) ? String(payload.role) : "assistant",
     permissions: JSON.stringify(Array.isArray(payload.permissions) ? payload.permissions.slice(0, 20) : []),
     status: payload.status === "disabled" ? "disabled" : "active",
   };
