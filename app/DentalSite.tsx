@@ -165,7 +165,7 @@ type AdminSessionInfo = {
 type LiveEditTarget = {
   group: "siteText" | "heroConfig" | "headerFooterConfig" | "builderConfig" | "layoutConfig" | "themeConfig" | "bannerConfig" | "siteSettings";
   field: string;
-  type?: "text" | "image" | "link" | "background";
+  type?: "text" | "image" | "link" | "background" | "icon";
 };
 type LiveEditContextValue = {
   enabled: boolean;
@@ -1217,12 +1217,32 @@ function HomePage({ t, isArabic, data, onBook }: { t: (typeof copy)[Lang]; isAra
             </button>
             <div className={`service-grid home-service-grid slide-${serviceDirection}`}>
               {featuredServices.map((service, offset) => (
-                <article className="service-card" key={`${service.slug}-${serviceSlide}-${offset}`} style={{ "--card-delay": `${offset * 70}ms` } as CSSProperties}>
-                  {renderServiceVisual(service.icon)}
-                  <h3>{isArabic ? service.titleAr : service.titleEn}</h3>
-                  <p>{isArabic ? service.descriptionAr : service.descriptionEn}</p>
-                  <a href={`/services/${service.slug}`}>{isArabic ? "اعرف أكثر" : "Learn More"} <ChevronRight size={16} /></a>
-                </article>
+                <LiveEditableDataCard
+                  className="service-card-shell"
+                  key={`${service.slug}-${serviceSlide}-${offset}`}
+                  endpoint="/api/admin/services"
+                  label={isArabic ? "تعديل الخدمة" : "Edit service"}
+                  payload={{
+                    id: service.id,
+                    slug: service.slug,
+                    titleAr: service.titleAr,
+                    titleEn: service.titleEn,
+                    descriptionAr: service.descriptionAr,
+                    descriptionEn: service.descriptionEn,
+                    whatsappMessageAr: service.whatsappMessageAr,
+                    whatsappMessageEn: service.whatsappMessageEn,
+                    icon: service.icon,
+                    featured: service.featured,
+                    status: "published",
+                  }}
+                >
+                  <article className="service-card" style={{ "--card-delay": `${offset * 70}ms` } as CSSProperties}>
+                    {renderServiceVisual(service.icon)}
+                    <h3>{isArabic ? service.titleAr : service.titleEn}</h3>
+                    <p>{isArabic ? service.descriptionAr : service.descriptionEn}</p>
+                    <a href={`/services/${service.slug}`}>{isArabic ? "اعرف أكثر" : "Learn More"} <ChevronRight size={16} /></a>
+                  </article>
+                </LiveEditableDataCard>
               ))}
             </div>
             <button className="round-arrow next-arrow" type="button" aria-label={isArabic ? "الخدمات التالية" : "Next services"} onClick={() => moveServices("next")}>
@@ -1365,7 +1385,7 @@ function EditableText({ target, children, className, as = "span", valueOverride 
         <span className="live-edit-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
           <label>
             <span>Text</span>
-            <textarea autoFocus value={value} onChange={(event) => setValue(event.target.value)} />
+            <textarea value={value} onChange={(event) => setValue(event.target.value)} />
           </label>
           <span className="live-edit-modal-actions">
             <button type="button" onClick={() => void save()}><Check size={15} /> Save</button>
@@ -1445,7 +1465,7 @@ function EditableLink({
           {textTarget ? (
             <label>
               <span>Text</span>
-              <input autoFocus value={labelValue} onChange={(event) => setLabelValue(event.target.value)} />
+              <input value={labelValue} onChange={(event) => setLabelValue(event.target.value)} />
             </label>
           ) : null}
           {hrefTarget ? (
@@ -1461,6 +1481,133 @@ function EditableLink({
         </span>
       ) : null}
     </a>
+  );
+}
+
+function LiveEditableIcon({ target, value, size = 18 }: { target: LiveEditTarget; value?: string; size?: number }) {
+  const live = useContext(LiveEditContext);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [nextIcon, setNextIcon] = useState(value || "sparkles");
+
+  useEffect(() => {
+    setNextIcon(value || "sparkles");
+  }, [value]);
+
+  async function save(icon: string) {
+    setNextIcon(icon);
+    setModalOpen(false);
+    await live.save({ ...target, type: "icon" }, icon);
+  }
+
+  if (!live.enabled) return <>{builderIcon(value, size)}</>;
+
+  return (
+    <span
+      className="live-edit-icon editable-bound"
+      data-live-edit="icon"
+      onClickCapture={(event) => {
+        if (isInsideLiveEditModal(event)) return;
+        interceptLiveEditClick(event);
+        setModalOpen(true);
+      }}
+    >
+      {builderIcon(nextIcon, size)}
+      <Edit3 className="live-edit-pencil" size={13} aria-hidden="true" />
+      {modalOpen ? (
+        <span className="live-edit-modal live-edit-icon-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+          <strong>Icon</strong>
+          <span className="live-edit-icon-grid">
+            {cmsIconOptions.map((item) => (
+              <button
+                className={nextIcon === item.key ? "active" : ""}
+                type="button"
+                key={item.key}
+                onClick={() => void save(item.key)}
+                title={item.en}
+              >
+                {builderIcon(item.key, 18)}
+                <span>{item.en}</span>
+              </button>
+            ))}
+          </span>
+          <span className="live-edit-modal-actions">
+            <button type="button" onClick={() => setModalOpen(false)}>Cancel</button>
+          </span>
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+function LiveEditableDataCard({
+  children,
+  className,
+  payload,
+  endpoint,
+  label = "Edit item",
+}: {
+  children: ReactNode;
+  className?: string;
+  payload: Record<string, unknown>;
+  endpoint: string;
+  label?: string;
+}) {
+  const live = useContext(LiveEditContext);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [jsonValue, setJsonValue] = useState(JSON.stringify(payload, null, 2));
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setJsonValue(JSON.stringify(payload, null, 2));
+  }, [payload]);
+
+  async function save() {
+    try {
+      const parsed = JSON.parse(jsonValue) as Record<string, unknown>;
+      const response = await fetch(endpoint, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed),
+      });
+      if (!response.ok) throw new Error("Could not save item");
+      setError("");
+      setModalOpen(false);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Invalid JSON");
+    }
+  }
+
+  if (!live.enabled) return <>{children}</>;
+
+  return (
+    <div
+      className={className ? `${className} live-edit-data-card editable-bound` : "live-edit-data-card editable-bound"}
+      data-live-edit="data-card"
+      onClickCapture={(event) => {
+        if (isInsideLiveEditModal(event)) return;
+        const target = event.target instanceof Element ? event.target : null;
+        if (target?.closest(".live-edit-text, .live-edit-image, .live-edit-link, .live-edit-icon")) return;
+        interceptLiveEditClick(event);
+        setModalOpen(true);
+      }}
+    >
+      {children}
+      <span className="live-edit-card-badge"><Edit3 size={14} /> {label}</span>
+      {modalOpen ? (
+        <span className="live-edit-modal live-edit-json-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+          <strong>{label}</strong>
+          <label>
+            <span>JSON</span>
+            <textarea value={jsonValue} onChange={(event) => setJsonValue(event.target.value)} spellCheck={false} />
+          </label>
+          {error ? <span className="admin-error">{error}</span> : null}
+          <span className="live-edit-modal-actions">
+            <button type="button" onClick={() => void save()}><Check size={15} /> Save</button>
+            <button type="button" onClick={() => setModalOpen(false)}>Cancel</button>
+          </span>
+        </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -1496,7 +1643,7 @@ function LiveEditableImage({ target, src, alt, className, loading, decorative }:
       }}
     >
       <img className={className} src={src} alt={alt} loading={loading} aria-hidden={decorative ? "true" : undefined} />
-      <span><ImageIcon size={15} /> تغيير</span>
+      <span className="live-edit-image-badge"><ImageIcon size={15} /> تغيير</span>
       {modalOpen ? (
         <span className="live-edit-modal live-edit-image-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
           <label>
@@ -1628,7 +1775,7 @@ function TrustBar({ isArabic, builder }: { isArabic: boolean; builder?: BuilderC
     <section className="trust-bar" aria-label="Clinic trust highlights">
       {items.map((item, index) => (
         <span key={`${item.icon || "trust"}-${index}`}>
-          {builderIcon(item.icon, 18)}
+          <LiveEditableIcon target={{ group: "builderConfig", field: `trustItems.${index}.icon`, type: "icon" }} value={item.icon} size={18} />
           <EditableText as="span" target={{ group: "builderConfig", field: `trustItems.${index}.${isArabic ? "ar" : "en"}` }}>{localizedPair(item, isArabic)}</EditableText>
         </span>
       ))}
@@ -1697,14 +1844,14 @@ function SmileJourney({ isArabic, builder, siteText = {} }: { isArabic: boolean;
       <div className="journey-timeline">
         {steps.map((step, index) => (
           <button className={activeIndex === index ? "journey-step active" : "journey-step"} type="button" key={step.key || step.titleEn || index} onClick={() => setActive(index)}>
-            <span>{builderIcon(step.icon, 20)}</span>
+            <span><LiveEditableIcon target={{ group: "builderConfig", field: `journeySteps.${index}.icon`, type: "icon" }} value={step.icon} size={20} /></span>
             <EditableText as="strong" target={{ group: "builderConfig", field: `journeySteps.${index}.title${suffix}` }}>{isArabic ? step.titleAr : step.titleEn}</EditableText>
           </button>
         ))}
       </div>
       {activeStep ? <article className={activeIndex === 0 ? "journey-detail whatsapp-detail" : "journey-detail"}>
-        <div className={activeIndex === 0 ? "journey-whatsapp-icon journey-detail-icon" : "journey-detail-icon"} aria-hidden="true">
-          {builderIcon(activeStep.icon, 20)}
+        <div className={activeIndex === 0 ? "journey-whatsapp-icon journey-detail-icon" : "journey-detail-icon"}>
+          <LiveEditableIcon target={{ group: "builderConfig", field: `journeySteps.${activeIndex}.icon`, type: "icon" }} value={activeStep.icon} size={20} />
         </div>
         <div>
           <EditableText as="strong" target={{ group: "builderConfig", field: `journeySteps.${activeIndex}.title${suffix}` }}>{isArabic ? activeStep.titleAr : activeStep.titleEn}</EditableText>
@@ -1864,12 +2011,32 @@ function ServicesPage({ data, isArabic }: { data: SiteData; isArabic: boolean })
       </div>
       <div className="service-grid">
         {visibleServices.map((service) => (
-          <article className="service-card" key={service.slug}>
-            {renderServiceVisual(service.icon)}
-            <h3>{isArabic ? service.titleAr : service.titleEn}</h3>
-            <p>{isArabic ? service.descriptionAr : service.descriptionEn}</p>
-            <a href={`/services/${service.slug}`}>{isArabic ? "اعرف أكثر" : "Learn More"}</a>
-          </article>
+          <LiveEditableDataCard
+            className="service-card-shell"
+            key={service.slug}
+            endpoint="/api/admin/services"
+            label={isArabic ? "تعديل الخدمة" : "Edit service"}
+            payload={{
+              id: service.id,
+              slug: service.slug,
+              titleAr: service.titleAr,
+              titleEn: service.titleEn,
+              descriptionAr: service.descriptionAr,
+              descriptionEn: service.descriptionEn,
+              whatsappMessageAr: service.whatsappMessageAr,
+              whatsappMessageEn: service.whatsappMessageEn,
+              icon: service.icon,
+              featured: service.featured,
+              status: "published",
+            }}
+          >
+            <article className="service-card">
+              {renderServiceVisual(service.icon)}
+              <h3>{isArabic ? service.titleAr : service.titleEn}</h3>
+              <p>{isArabic ? service.descriptionAr : service.descriptionEn}</p>
+              <a href={`/services/${service.slug}`}>{isArabic ? "اعرف أكثر" : "Learn More"}</a>
+            </article>
+          </LiveEditableDataCard>
         ))}
       </div>
     </section>
