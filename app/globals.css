@@ -31,7 +31,8 @@
 
 /* Visual front-end builder and CMS delivery layer */
 .live-edit-enabled .live-edit-text,
-.live-edit-enabled .live-edit-image {
+.live-edit-enabled .live-edit-image,
+.live-edit-enabled .live-edit-link {
   position: relative;
   outline: 1px dashed transparent;
   outline-offset: 5px;
@@ -41,7 +42,9 @@
 }
 
 .live-edit-enabled .live-edit-text:hover,
-.live-edit-enabled .live-edit-text:focus {
+.live-edit-enabled .live-edit-text:focus,
+.live-edit-enabled .live-edit-link:hover,
+.live-edit-enabled .live-edit-link:focus {
   outline-color: rgba(212, 175, 55, 0.75);
   background: rgba(255, 246, 216, 0.5);
   box-shadow: 0 10px 26px rgba(17, 24, 39, 0.08);
@@ -57,7 +60,9 @@
 }
 
 .live-edit-enabled .live-edit-text:hover .live-edit-pencil,
-.live-edit-enabled .live-edit-text:focus .live-edit-pencil {
+.live-edit-enabled .live-edit-text:focus .live-edit-pencil,
+.live-edit-enabled .live-edit-link:hover .live-edit-pencil,
+.live-edit-enabled .live-edit-link:focus .live-edit-pencil {
   opacity: 1;
 }
 
@@ -639,19 +644,37 @@
 }
 
 .live-edit-enabled .live-edit-text,
-.live-edit-enabled .live-edit-image {
+.live-edit-enabled .live-edit-image,
+.live-edit-enabled .live-edit-link {
   cursor: pointer;
 }
 
 .live-edit-enabled .live-edit-text:hover,
-.live-edit-enabled .live-edit-image:hover {
+.live-edit-enabled .live-edit-image:hover,
+.live-edit-enabled .live-edit-link:hover {
   outline-color: rgba(212, 175, 55, 0.62);
   background: rgba(255, 246, 216, 0.28);
   box-shadow: none;
 }
 
-.live-edit-enabled .live-edit-text:focus {
+.live-edit-enabled .live-edit-text:focus,
+.live-edit-enabled .live-edit-link:focus {
   outline-color: rgba(212, 175, 55, 0.75);
+}
+
+.live-edit-link {
+  display: inline-flex;
+  align-items: center;
+  gap: inherit;
+}
+
+.live-edit-link-modal {
+  gap: 14px;
+}
+
+.live-edit-audit :is(h1, h2, h3, p, span, a, button, img, svg):not(.editable-bound):not(.live-edit-pencil):not(.live-edit-modal *):not(.live-section-toolbar *):not(.edit-mode-bar *):hover {
+  outline: 1px dotted rgba(239, 68, 68, 0.75);
+  outline-offset: 3px;
 }
 
 .live-edit-modal {

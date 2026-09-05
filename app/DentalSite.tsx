@@ -85,7 +85,22 @@ type FaqItem = { id: number; question_ar: string; question_en: string; answer_ar
 type HeroConfig = Record<string, string>;
 type ThemeConfig = { gold?: string; bronze?: string; charcoal?: string; background?: string; darkModeEnabled?: boolean; buttonStyle?: string; cardRadius?: string; shadowLevel?: string; headingScale?: string; bodyScale?: string };
 type LayoutConfig = { sections?: string[]; hiddenSections?: string[]; previewMode?: boolean };
-type HeaderFooterConfig = { logo?: string; footerTextAr?: string; footerTextEn?: string; showSocial?: boolean; navOrder?: string[] };
+type HeaderFooterConfig = {
+  logo?: string;
+  footerTextAr?: string;
+  footerTextEn?: string;
+  copyrightAr?: string;
+  copyrightEn?: string;
+  bookButtonAr?: string;
+  bookButtonEn?: string;
+  showSocial?: boolean;
+  navOrder?: string[];
+  navLabels?: Record<string, { ar?: string; en?: string }>;
+  navHrefs?: Record<string, string>;
+  socialLabels?: Record<string, string>;
+  footerServiceLabels?: Record<string, { ar?: string; en?: string }>;
+  footerServiceHrefs?: Record<string, string>;
+};
 type BannerConfig = { enabled?: boolean; textAr?: string; textEn?: string; link?: string };
 type FormConfig = { requireName?: boolean; requirePhone?: boolean; showAge?: boolean; showImage?: boolean; showDate?: boolean; showMessage?: boolean };
 type ScriptsConfig = { googleAnalytics?: string; metaPixel?: string; tiktokPixel?: string; googleTagManager?: string };
@@ -101,7 +116,7 @@ type BuilderConfig = {
   patientQuestions?: Array<{ questionAr?: string; questionEn?: string; answerAr?: string; answerEn?: string; enabled?: boolean }>;
   clinicTour?: Array<{ image?: string; altAr?: string; altEn?: string; enabled?: boolean }>;
   blogThumbs?: string[];
-  implantSection?: { labelAr?: string; labelEn?: string; titleAr?: string; titleEn?: string; textAr?: string; textEn?: string; image?: string; buttonAr?: string; buttonEn?: string; linkTextAr?: string; linkTextEn?: string };
+  implantSection?: { labelAr?: string; labelEn?: string; titleAr?: string; titleEn?: string; textAr?: string; textEn?: string; image?: string; buttonAr?: string; buttonEn?: string; linkTextAr?: string; linkTextEn?: string; linkUrl?: string };
   previewSection?: { labelAr?: string; labelEn?: string; titleAr?: string; titleEn?: string; textAr?: string; textEn?: string; buttonAr?: string; buttonEn?: string; namePlaceholderAr?: string; namePlaceholderEn?: string; problemPlaceholderAr?: string; problemPlaceholderEn?: string };
   casesPage?: { labelAr?: string; labelEn?: string; titleAr?: string; titleEn?: string; textAr?: string; textEn?: string; proof1Ar?: string; proof1En?: string; proof2Ar?: string; proof2En?: string; proof3Ar?: string; proof3En?: string };
   articleLabels?: { detailLabelAr?: string; detailLabelEn?: string; footerLabelAr?: string; footerLabelEn?: string; shareAr?: string; shareEn?: string };
@@ -148,9 +163,9 @@ type AdminSessionInfo = {
   isSuperAdmin?: boolean;
 };
 type LiveEditTarget = {
-  group: "siteText" | "heroConfig" | "headerFooterConfig" | "builderConfig" | "layoutConfig" | "themeConfig";
+  group: "siteText" | "heroConfig" | "headerFooterConfig" | "builderConfig" | "layoutConfig" | "themeConfig" | "bannerConfig" | "siteSettings";
   field: string;
-  type?: "text" | "image";
+  type?: "text" | "image" | "link" | "background";
 };
 type LiveEditContextValue = {
   enabled: boolean;
@@ -199,6 +214,15 @@ const nav = [
   { page: "blog", href: "/blog", ar: "المقالات", en: "Blog" },
   { page: "contact", href: "/contact", ar: "تواصل", en: "Contact" },
 ] as const;
+
+function navText(item: (typeof nav)[number], config: HeaderFooterConfig | undefined, isArabic: boolean) {
+  const label = config?.navLabels?.[item.page];
+  return isArabic ? (label?.ar || item.ar) : (label?.en || item.en);
+}
+
+function navHref(item: (typeof nav)[number], config: HeaderFooterConfig | undefined) {
+  return config?.navHrefs?.[item.page] || item.href;
+}
 
 const copy = {
   ar: {
@@ -744,6 +768,9 @@ export function DentalSite({ page = "home", serviceSlug, article }: { page?: Pag
 
   function updateLocalConfig(target: LiveEditTarget, value: string) {
     setData((current) => {
+      if (target.group === "siteSettings") {
+        return { ...current, settings: { ...(current.settings || defaultSiteSettings), [target.field]: value } };
+      }
       const currentGroup = ((current[target.group] as Record<string, unknown> | undefined) || {});
       const nextGroup = { ...currentGroup };
       const parts = target.field.split(".").filter(Boolean);
@@ -820,7 +847,7 @@ export function DentalSite({ page = "home", serviceSlug, article }: { page?: Pag
 
   return (
     <LiveEditContext.Provider value={liveEdit}>
-    <main className={liveEdit.enabled ? "site-shell live-edit-enabled" : "site-shell"}>
+    <main className={liveEdit.enabled ? "site-shell live-edit-enabled live-edit-audit" : "site-shell"}>
       {showEditModeBar ? <EditModeBar enabled={editMode} isArabic={isArabic} onToggle={() => setEditMode((current) => !current)} /> : null}
       <LoadingScreen />
       <SiteScripts scripts={data.scriptsConfig} />
@@ -893,10 +920,17 @@ function QuickActions({ isArabic, settings, page, serviceSlug }: { isArabic: boo
 
 function SiteBanner({ banner, isArabic }: { banner?: BannerConfig; isArabic: boolean }) {
   if (!banner?.enabled) return null;
+  const text = isArabic ? (banner.textAr || "الحجز متاح الآن عبر واتساب") : (banner.textEn || "WhatsApp booking is available now");
   return (
-    <a className="site-announcement" href={banner.link || "#"} target={banner.link ? "_blank" : undefined} rel="noreferrer">
-      {isArabic ? banner.textAr : banner.textEn}
-    </a>
+    <EditableLink
+      className="site-announcement"
+      href={banner.link || "#"}
+      target={banner.link ? "_blank" : undefined}
+      rel="noreferrer"
+      text={text}
+      textTarget={{ group: "bannerConfig", field: isArabic ? "textAr" : "textEn" }}
+      hrefTarget={{ group: "bannerConfig", field: "link", type: "link" }}
+    />
   );
 }
 
@@ -993,18 +1027,29 @@ function Header({
     : nav;
   return (
     <header className="main-header">
-      <a className="brand" href="/" aria-label="Dr. Amr Elshamy Dental Clinic">
+      <EditableLink
+        className="brand"
+        href={config?.navHrefs?.home || "/"}
+        text="Dr. Amr Elshamy Dental Clinic"
+        hrefTarget={{ group: "headerFooterConfig", field: "navHrefs.home", type: "link" }}
+        ariaLabel="Dr. Amr Elshamy Dental Clinic"
+      >
         <LiveEditableImage target={{ group: "headerFooterConfig", field: "logo", type: "image" }} className="brand-logo light-logo" src={logo} alt="Dr. Amr Elshamy logo" />
         <LiveEditableImage target={{ group: "headerFooterConfig", field: "logo", type: "image" }} className="brand-logo dark-logo" src={logo} alt="Dr. Amr Elshamy logo" />
-      </a>
+      </EditableLink>
 
       <nav className={menuOpen ? "nav open" : "nav"} aria-label="Primary navigation">
         {orderedNav.map((item) => (
           item.page === "services" ? (
             <div className="nav-mega-wrap" key={item.href}>
-              <a className={page === item.page || page === "service-detail" ? "active" : ""} href={item.href} onClick={() => setMenuOpen(false)}>
-                {isArabic ? item.ar : item.en}
-              </a>
+              <EditableLink
+                className={page === item.page || page === "service-detail" ? "active" : ""}
+                href={navHref(item, config)}
+                text={navText(item, config, isArabic)}
+                textTarget={{ group: "headerFooterConfig", field: `navLabels.${item.page}.${isArabic ? "ar" : "en"}` }}
+                hrefTarget={{ group: "headerFooterConfig", field: `navHrefs.${item.page}`, type: "link" }}
+                onClick={() => setMenuOpen(false)}
+              />
               <div className="mega-menu">
                 {services.slice(0, 6).map((service, index) => (
                   <a href={`/services/${serviceSlugs[index]}`} key={service[0]}>
@@ -1015,9 +1060,15 @@ function Header({
               </div>
             </div>
           ) : (
-            <a className={page === item.page ? "active" : ""} key={item.href} href={item.href} onClick={() => setMenuOpen(false)}>
-              {isArabic ? item.ar : item.en}
-            </a>
+            <EditableLink
+              className={page === item.page ? "active" : ""}
+              key={item.href}
+              href={navHref(item, config)}
+              text={navText(item, config, isArabic)}
+              textTarget={{ group: "headerFooterConfig", field: `navLabels.${item.page}.${isArabic ? "ar" : "en"}` }}
+              hrefTarget={{ group: "headerFooterConfig", field: `navHrefs.${item.page}`, type: "link" }}
+              onClick={() => setMenuOpen(false)}
+            />
           )
         ))}
       </nav>
@@ -1039,7 +1090,7 @@ function Header({
         </button>
         <button className="book-button" type="button" onClick={onBook}>
           <CalendarCheck size={18} />
-          <span>{isArabic ? "احجز الآن" : "Book Now"}</span>
+          <EditableText as="button-label" target={{ group: "headerFooterConfig", field: isArabic ? "bookButtonAr" : "bookButtonEn" }}>{isArabic ? ((config as Record<string, string> | undefined)?.bookButtonAr || "احجز الآن") : ((config as Record<string, string> | undefined)?.bookButtonEn || "Book Now")}</EditableText>
         </button>
         <button className="menu-button" type="button" onClick={() => setMenuOpen(!menuOpen)} aria-label="Open menu">
           {menuOpen ? <X size={22} /> : <Menu size={22} />}
@@ -1116,7 +1167,15 @@ function HomePage({ t, isArabic, data, onBook }: { t: (typeof copy)[Lang]; isAra
             </p>
             <div className="hero-buttons">
               <button className="primary-button" type="button" onClick={onBook}><CalendarCheck size={18} /> <EditableText as="button-label" target={{ group: "heroConfig", field: isArabic ? "primaryCtaAr" : "primaryCtaEn" }}>{isArabic ? (hero.primaryCtaAr || t.book) : (hero.primaryCtaEn || t.book)}</EditableText></button>
-              <a className="secondary-button" href="/services"><EditableText as="button-label" target={{ group: "heroConfig", field: isArabic ? "secondaryCtaAr" : "secondaryCtaEn" }}>{isArabic ? (hero.secondaryCtaAr || t.servicesCta) : (hero.secondaryCtaEn || t.servicesCta)}</EditableText> <ChevronRight size={18} /></a>
+              <EditableLink
+                className="secondary-button"
+                href={hero.secondaryCtaUrl || "/services"}
+                text={isArabic ? (hero.secondaryCtaAr || t.servicesCta) : (hero.secondaryCtaEn || t.servicesCta)}
+                textTarget={{ group: "heroConfig", field: isArabic ? "secondaryCtaAr" : "secondaryCtaEn" }}
+                hrefTarget={{ group: "heroConfig", field: "secondaryCtaUrl", type: "link" }}
+              >
+                {isArabic ? (hero.secondaryCtaAr || t.servicesCta) : (hero.secondaryCtaEn || t.servicesCta)} <ChevronRight size={18} />
+              </EditableLink>
             </div>
             <div className="hero-trust-pills">
               <span><Star size={15} fill="currentColor" /> 5.0</span>
@@ -1138,11 +1197,11 @@ function HomePage({ t, isArabic, data, onBook }: { t: (typeof copy)[Lang]; isAra
         </EditableSection>
       );
     }
-    if (key === "stats") return <EditableSection id={key} label={isArabic ? "الإحصائيات" : "Stats"} key={key}><Stats t={t} hero={hero} /></EditableSection>;
+    if (key === "stats") return <EditableSection id={key} label={isArabic ? "الإحصائيات" : "Stats"} key={key}><Stats t={t} hero={hero} siteText={siteText} /></EditableSection>;
     if (key === "trust") return <EditableSection id={key} label={isArabic ? "الثقة" : "Trust"} key={key}><TrustBar isArabic={isArabic} builder={data.builderConfig} /></EditableSection>;
     if (key === "implant") return <EditableSection id={key} label={isArabic ? "الزراعة" : "Implant"} key={key}><ImplantVisualFeature isArabic={isArabic} onBook={onBook} builder={data.builderConfig} /></EditableSection>;
-    if (key === "journey") return <EditableSection id={key} label={isArabic ? "رحلة العلاج" : "Journey"} key={key}><SmileJourney isArabic={isArabic} builder={data.builderConfig} /></EditableSection>;
-    if (key === "quiz") return <EditableSection id={key} label={isArabic ? "اختبار الحجز" : "Quiz"} key={key}><QuickConsultQuiz isArabic={isArabic} builder={data.builderConfig} /></EditableSection>;
+    if (key === "journey") return <EditableSection id={key} label={isArabic ? "رحلة العلاج" : "Journey"} key={key}><SmileJourney isArabic={isArabic} builder={data.builderConfig} siteText={siteText} /></EditableSection>;
+    if (key === "quiz") return <EditableSection id={key} label={isArabic ? "اختبار الحجز" : "Quiz"} key={key}><QuickConsultQuiz isArabic={isArabic} builder={data.builderConfig} siteText={siteText} /></EditableSection>;
     if (key === "preview") return <EditableSection id={key} label={isArabic ? "معاينة الابتسامة" : "Preview"} key={key}><SmilePreviewCta isArabic={isArabic} builder={data.builderConfig} /></EditableSection>;
     if (key === "comfort") return <EditableSection id={key} label={isArabic ? "راحة المرضى" : "Comfort"} key={key}><PatientComfortSection isArabic={isArabic} siteText={siteText} builder={data.builderConfig} /></EditableSection>;
     if (key === "services") {
@@ -1197,9 +1256,15 @@ function HomePage({ t, isArabic, data, onBook }: { t: (typeof copy)[Lang]; isAra
             ))}
           </div>
           <div className="home-review-actions">
-            <a className="secondary-button" href="/reviews">
-              <EditableText as="button-label" target={{ group: "siteText", field: isArabic ? "reviewsButtonAr" : "reviewsButtonEn" }}>{siteCopy(isArabic ? "reviewsButtonAr" : "reviewsButtonEn", isArabic ? "شوف باقي آراء المرضى" : "See More Patient Reviews")}</EditableText> <ChevronRight size={18} />
-            </a>
+            <EditableLink
+              className="secondary-button"
+              href={siteCopy("reviewsButtonUrl", "/reviews")}
+              text={siteCopy(isArabic ? "reviewsButtonAr" : "reviewsButtonEn", isArabic ? "شوف باقي آراء المرضى" : "See More Patient Reviews")}
+              textTarget={{ group: "siteText", field: isArabic ? "reviewsButtonAr" : "reviewsButtonEn" }}
+              hrefTarget={{ group: "siteText", field: "reviewsButtonUrl", type: "link" }}
+            >
+              {siteCopy(isArabic ? "reviewsButtonAr" : "reviewsButtonEn", isArabic ? "شوف باقي آراء المرضى" : "See More Patient Reviews")} <ChevronRight size={18} />
+            </EditableLink>
           </div>
         </section>
         </EditableSection>
@@ -1229,9 +1294,9 @@ function PageIntro({ page, t, isArabic, siteText = {} }: { page: Page; t: (typeo
       <div className="intro-mark" aria-hidden="true">
         <ToothToggleIcon />
       </div>
-      <p className="section-label">{label}</p>
-      <h1>{title}</h1>
-      <p>{description}</p>
+      <p className="section-label"><EditableText as="span" target={{ group: "siteText", field: `${keyPrefix}Label${langSuffix}` }}>{label}</EditableText></p>
+      <EditableText as="h1" target={{ group: "siteText", field: `${keyPrefix}Title${langSuffix}` }}>{title}</EditableText>
+      <EditableText as="p" target={{ group: "siteText", field: `${keyPrefix}Text${langSuffix}` }}>{description}</EditableText>
     </section>
   );
 }
@@ -1267,26 +1332,26 @@ function isInsideLiveEditModal(event: SyntheticEvent<HTMLElement>) {
   return event.target instanceof Element && Boolean(event.target.closest(".live-edit-modal"));
 }
 
-function EditableText({ target, children, className, as = "span" }: { target: LiveEditTarget; children: ReactNode; className?: string; as?: "span" | "p" | "h1" | "h2" | "h3" | "strong" | "button-label" }) {
+function EditableText({ target, children, className, as = "span", valueOverride }: { target: LiveEditTarget; children: ReactNode; className?: string; as?: "span" | "p" | "h1" | "h2" | "h3" | "strong" | "button-label"; valueOverride?: string }) {
   const live = useContext(LiveEditContext);
   const [modalOpen, setModalOpen] = useState(false);
   const [value, setValue] = useState("");
   const Tag = as === "button-label" ? "span" : as;
 
   useEffect(() => {
-    setValue(typeof children === "string" ? children : "");
-  }, [children]);
+    setValue(valueOverride ?? (typeof children === "string" ? children : ""));
+  }, [children, valueOverride]);
 
   async function save() {
     setModalOpen(false);
-    if (value.trim()) await live.save(target, value);
+    await live.save(target, value);
   }
 
   if (!live.enabled) return <Tag className={className}>{children}</Tag>;
 
   return (
     <Tag
-      className={className ? `${className} live-edit-text` : "live-edit-text"}
+      className={className ? `${className} live-edit-text editable-bound` : "live-edit-text editable-bound"}
       onClickCapture={(event) => {
         if (isInsideLiveEditModal(event)) return;
         interceptLiveEditClick(event);
@@ -1309,6 +1374,93 @@ function EditableText({ target, children, className, as = "span" }: { target: Li
         </span>
       ) : null}
     </Tag>
+  );
+}
+
+function EditableLink({
+  href,
+  text,
+  textTarget,
+  hrefTarget,
+  className,
+  children,
+  target,
+  rel,
+  ariaLabel,
+  onClick,
+}: {
+  href: string;
+  text: string;
+  textTarget?: LiveEditTarget;
+  hrefTarget?: LiveEditTarget;
+  className?: string;
+  children?: ReactNode;
+  target?: string;
+  rel?: string;
+  ariaLabel?: string;
+  onClick?: () => void;
+}) {
+  const live = useContext(LiveEditContext);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [labelValue, setLabelValue] = useState(text);
+  const [hrefValue, setHrefValue] = useState(href);
+
+  useEffect(() => {
+    setLabelValue(text);
+    setHrefValue(href);
+  }, [text, href]);
+
+  async function save() {
+    setModalOpen(false);
+    if (textTarget) await live.save(textTarget, labelValue);
+    if (hrefTarget) await live.save({ ...hrefTarget, type: "link" }, hrefValue);
+  }
+
+  if (!live.enabled) {
+    return (
+      <a className={className} href={href} target={target} rel={rel} aria-label={ariaLabel} onClick={onClick}>
+        {children || text}
+      </a>
+    );
+  }
+
+  return (
+    <a
+      className={className ? `${className} live-edit-link editable-bound` : "live-edit-link editable-bound"}
+      href={href}
+      target={target}
+      rel={rel}
+      aria-label={ariaLabel}
+      data-live-edit="link"
+      onClickCapture={(event) => {
+        if (isInsideLiveEditModal(event)) return;
+        interceptLiveEditClick(event);
+        setModalOpen(true);
+      }}
+    >
+      {children || text}
+      <Edit3 className="live-edit-pencil" size={15} aria-hidden="true" />
+      {modalOpen ? (
+        <span className="live-edit-modal live-edit-link-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+          {textTarget ? (
+            <label>
+              <span>Text</span>
+              <input autoFocus value={labelValue} onChange={(event) => setLabelValue(event.target.value)} />
+            </label>
+          ) : null}
+          {hrefTarget ? (
+            <label>
+              <span>URL</span>
+              <input value={hrefValue} onChange={(event) => setHrefValue(event.target.value)} />
+            </label>
+          ) : null}
+          <span className="live-edit-modal-actions">
+            <button type="button" onClick={() => void save()}><Check size={15} /> Save</button>
+            <button type="button" onClick={() => setModalOpen(false)}>Cancel</button>
+          </span>
+        </span>
+      ) : null}
+    </a>
   );
 }
 
@@ -1335,7 +1487,7 @@ function LiveEditableImage({ target, src, alt, className, loading, decorative }:
 
   return (
     <span
-      className="live-edit-image"
+      className="live-edit-image editable-bound"
       data-live-edit="image"
       onClickCapture={(event) => {
         if (isInsideLiveEditModal(event)) return;
@@ -1406,11 +1558,12 @@ function HiddenSectionsDock({ hiddenKeys, isArabic }: { hiddenKeys: string[]; is
   );
 }
 
-function Stats({ t, hero }: { t: (typeof copy)[Lang]; hero?: HeroConfig }) {
+function Stats({ t, hero, siteText = {} }: { t: (typeof copy)[Lang]; hero?: HeroConfig; siteText?: Record<string, string> }) {
+  const suffix = t.dir === "rtl" ? "Ar" : "En";
   const stats = [
-    [hero?.metric1 || t.stats[0][0], t.stats[0][1], t.stats[0][2]],
-    [hero?.metric2 || t.stats[1][0], t.stats[1][1], t.stats[1][2]],
-    [hero?.metric3 || t.stats[2][0], t.stats[2][1], t.stats[2][2]],
+    [hero?.metric1 || t.stats[0][0], siteText[`stat1Title${suffix}`] || t.stats[0][1], siteText[`stat1Text${suffix}`] || t.stats[0][2]],
+    [hero?.metric2 || t.stats[1][0], siteText[`stat2Title${suffix}`] || t.stats[1][1], siteText[`stat2Text${suffix}`] || t.stats[1][2]],
+    [hero?.metric3 || t.stats[2][0], siteText[`stat3Title${suffix}`] || t.stats[2][1], siteText[`stat3Text${suffix}`] || t.stats[2][2]],
   ];
   return (
     <section className="stats-row" aria-label="Clinic highlights">
@@ -1418,9 +1571,9 @@ function Stats({ t, hero }: { t: (typeof copy)[Lang]; hero?: HeroConfig }) {
         <div className="stat-item" key={item[1]}>
           <img className="metric-icon-3d" src={metricIcons[index]} alt="" aria-hidden="true" loading="lazy" />
           <div>
-            <strong><AnimatedStatNumber value={item[0]} /></strong>
-            <span>{item[1]}</span>
-            <small>{item[2]}</small>
+            <strong><EditableText as="span" target={{ group: "heroConfig", field: `metric${index + 1}` }} valueOverride={item[0]}><AnimatedStatNumber value={item[0]} /></EditableText></strong>
+            <EditableText as="span" target={{ group: "siteText", field: `stat${index + 1}Title${suffix}` }}>{item[1]}</EditableText>
+            <EditableText as="span" className="stat-small-edit" target={{ group: "siteText", field: `stat${index + 1}Text${suffix}` }}>{item[2]}</EditableText>
           </div>
         </div>
       ))}
@@ -1476,7 +1629,7 @@ function TrustBar({ isArabic, builder }: { isArabic: boolean; builder?: BuilderC
       {items.map((item, index) => (
         <span key={`${item.icon || "trust"}-${index}`}>
           {builderIcon(item.icon, 18)}
-          {localizedPair(item, isArabic)}
+          <EditableText as="span" target={{ group: "builderConfig", field: `trustItems.${index}.${isArabic ? "ar" : "en"}` }}>{localizedPair(item, isArabic)}</EditableText>
         </span>
       ))}
     </section>
@@ -1488,26 +1641,34 @@ function ImplantVisualFeature({ isArabic, onBook, builder }: { isArabic: boolean
   return (
     <section className="implant-visual-feature">
       <div className="implant-visual-copy">
-        <p className="section-label">{isArabic ? (section.labelAr || "تصميم مستوحى من تقنيات الزراعة") : (section.labelEn || "Implantology Visual System")}</p>
-        <h2>{isArabic ? (section.titleAr || "تفاصيل ثلاثية الأبعاد تشرح الزراعة بشكل راقي") : (section.titleEn || "Premium 3D detail for clear implant care")}</h2>
-        <p>
+        <p className="section-label"><EditableText as="span" target={{ group: "builderConfig", field: `implantSection.${isArabic ? "labelAr" : "labelEn"}` }}>{isArabic ? (section.labelAr || "تصميم مستوحى من تقنيات الزراعة") : (section.labelEn || "Implantology Visual System")}</EditableText></p>
+        <EditableText as="h2" target={{ group: "builderConfig", field: `implantSection.${isArabic ? "titleAr" : "titleEn"}` }}>{isArabic ? (section.titleAr || "تفاصيل ثلاثية الأبعاد تشرح الزراعة بشكل راقي") : (section.titleEn || "Premium 3D detail for clear implant care")}</EditableText>
+        <EditableText as="p" target={{ group: "builderConfig", field: `implantSection.${isArabic ? "textAr" : "textEn"}` }}>
           {isArabic
             ? (section.textAr || "أضفنا عنصر أسنان ثلاثي الأبعاد بروح تصميمات الزراعة الحديثة، مع الحفاظ على هوية العيادة الذهبية والفحمية.")
             : (section.textEn || "A refined 3D dental implant visual brings modern implantology clarity while keeping the clinic gold and charcoal identity.")}
-        </p>
+        </EditableText>
         <div className="implant-feature-actions">
-          <button className="primary-button" type="button" onClick={onBook}><CalendarCheck size={18} /> {isArabic ? (section.buttonAr || "احجز استشارة زراعة") : (section.buttonEn || "Book Implant Consultation")}</button>
-          <a className="secondary-button" href="/services/dental-implants">{isArabic ? (section.linkTextAr || "تفاصيل زراعة الأسنان") : (section.linkTextEn || "Dental Implant Details")} <ChevronRight size={18} /></a>
+          <button className="primary-button" type="button" onClick={onBook}><CalendarCheck size={18} /> <EditableText as="button-label" target={{ group: "builderConfig", field: `implantSection.${isArabic ? "buttonAr" : "buttonEn"}` }}>{isArabic ? (section.buttonAr || "احجز استشارة زراعة") : (section.buttonEn || "Book Implant Consultation")}</EditableText></button>
+          <EditableLink
+            className="secondary-button"
+            href={(section as Record<string, string>).linkUrl || "/services/dental-implants"}
+            text={isArabic ? (section.linkTextAr || "تفاصيل زراعة الأسنان") : (section.linkTextEn || "Dental Implant Details")}
+            textTarget={{ group: "builderConfig", field: `implantSection.${isArabic ? "linkTextAr" : "linkTextEn"}` }}
+            hrefTarget={{ group: "builderConfig", field: "implantSection.linkUrl", type: "link" }}
+          >
+            {isArabic ? (section.linkTextAr || "تفاصيل زراعة الأسنان") : (section.linkTextEn || "Dental Implant Details")} <ChevronRight size={18} />
+          </EditableLink>
         </div>
       </div>
       <div className="implant-visual-art">
-        <img src={section.image || "/brand/dentax-inspired-teeth.png"} alt={isArabic ? "شكل ثلاثي الأبعاد لزراعة الأسنان" : "3D dental implant visual"} loading="lazy" />
+        <LiveEditableImage target={{ group: "builderConfig", field: "implantSection.image", type: "image" }} src={section.image || "/brand/dentax-inspired-teeth.png"} alt={isArabic ? "شكل ثلاثي الأبعاد لزراعة الأسنان" : "3D dental implant visual"} loading="lazy" />
       </div>
     </section>
   );
 }
 
-function SmileJourney({ isArabic, builder }: { isArabic: boolean; builder?: BuilderConfig }) {
+function SmileJourney({ isArabic, builder, siteText = {} }: { isArabic: boolean; builder?: BuilderConfig; siteText?: Record<string, string> }) {
   const [active, setActive] = useState(0);
   const steps = enabledItems(builder?.journeySteps, journeySteps.map((step, index) => ({
     key: step[0],
@@ -1520,23 +1681,24 @@ function SmileJourney({ isArabic, builder }: { isArabic: boolean; builder?: Buil
   const activeIndex = Math.min(active, Math.max(steps.length - 1, 0));
   const activeStep = steps[activeIndex] || steps[0];
   const labels = [
-    isArabic ? "رحلة الابتسامة" : "Smile Journey",
-    isArabic ? "من أول رسالة واتساب لحد المتابعة" : "From First WhatsApp Message to Follow-up",
-    isArabic ? "خطوات واضحة تخلي المريض فاهم ومطمن قبل كل مرحلة." : "A clear patient journey that keeps every step simple and reassuring.",
+    siteText[isArabic ? "journeyLabelAr" : "journeyLabelEn"] || (isArabic ? "رحلة الابتسامة" : "Smile Journey"),
+    siteText[isArabic ? "journeyTitleAr" : "journeyTitleEn"] || (isArabic ? "من أول رسالة واتساب لحد المتابعة" : "From First WhatsApp Message to Follow-up"),
+    siteText[isArabic ? "journeyTextAr" : "journeyTextEn"] || (isArabic ? "خطوات واضحة تخلي المريض فاهم ومطمن قبل كل مرحلة." : "A clear patient journey that keeps every step simple and reassuring."),
   ];
+  const suffix = isArabic ? "Ar" : "En";
 
   return (
     <section className="creative-section journey-section">
       <div className="creative-head">
-        <p className="section-label">{labels[0]}</p>
-        <h2>{labels[1]}</h2>
-        <p>{labels[2]}</p>
+        <p className="section-label"><EditableText as="span" target={{ group: "siteText", field: `journeyLabel${suffix}` }}>{labels[0]}</EditableText></p>
+        <EditableText as="h2" target={{ group: "siteText", field: `journeyTitle${suffix}` }}>{labels[1]}</EditableText>
+        <EditableText as="p" target={{ group: "siteText", field: `journeyText${suffix}` }}>{labels[2]}</EditableText>
       </div>
       <div className="journey-timeline">
         {steps.map((step, index) => (
           <button className={activeIndex === index ? "journey-step active" : "journey-step"} type="button" key={step.key || step.titleEn || index} onClick={() => setActive(index)}>
             <span>{builderIcon(step.icon, 20)}</span>
-            <strong>{isArabic ? step.titleAr : step.titleEn}</strong>
+            <EditableText as="strong" target={{ group: "builderConfig", field: `journeySteps.${index}.title${suffix}` }}>{isArabic ? step.titleAr : step.titleEn}</EditableText>
           </button>
         ))}
       </div>
@@ -1545,15 +1707,15 @@ function SmileJourney({ isArabic, builder }: { isArabic: boolean; builder?: Buil
           {builderIcon(activeStep.icon, 20)}
         </div>
         <div>
-          <strong>{isArabic ? activeStep.titleAr : activeStep.titleEn}</strong>
-          <p>{isArabic ? activeStep.textAr : activeStep.textEn}</p>
+          <EditableText as="strong" target={{ group: "builderConfig", field: `journeySteps.${activeIndex}.title${suffix}` }}>{isArabic ? activeStep.titleAr : activeStep.titleEn}</EditableText>
+          <EditableText as="p" target={{ group: "builderConfig", field: `journeySteps.${activeIndex}.text${suffix}` }}>{isArabic ? activeStep.textAr : activeStep.textEn}</EditableText>
         </div>
       </article> : null}
     </section>
   );
 }
 
-function QuickConsultQuiz({ isArabic, builder }: { isArabic: boolean; builder?: BuilderConfig }) {
+function QuickConsultQuiz({ isArabic, builder, siteText = {} }: { isArabic: boolean; builder?: BuilderConfig; siteText?: Record<string, string> }) {
   const options = enabledItems(builder?.quizOptions, quizOptions.map((option) => ({
     key: option[0],
     labelAr: option[1],
@@ -1568,18 +1730,22 @@ function QuickConsultQuiz({ isArabic, builder }: { isArabic: boolean; builder?: 
   const message = isArabic
     ? `مرحباً، محتاج حجز في عيادة Dr. Amr Elshamy.\nالمشكلة: ${selected?.messageAr || selected?.labelAr || ""}\nالمريض: ${patient}\nالأولوية: ${priority}`
     : `Hello, I need an appointment at Dr. Amr Elshamy Dental Clinic.\nConcern: ${selected?.messageEn || selected?.labelEn || ""}\nPatient: ${patient}\nPriority: ${priority}`;
+  const suffix = isArabic ? "Ar" : "En";
+  const label = siteText[`quizLabel${suffix}`] || (isArabic ? "اختبار سريع قبل الحجز" : "Quick Pre-booking Check");
+  const title = siteText[`quizTitle${suffix}`] || (isArabic ? "مشكلتك إيه؟ نجهز رسالة الحجز فوراً" : "What is your concern? We prepare the booking message");
+  const buttonText = siteText[`quizButton${suffix}`] || (isArabic ? "افتح واتساب بالرسالة" : "Open WhatsApp Message");
 
   return (
     <section className="creative-section quiz-section">
       <div className="creative-head">
-        <p className="section-label">{isArabic ? "اختبار سريع قبل الحجز" : "Quick Pre-booking Check"}</p>
-        <h2>{isArabic ? "مشكلتك إيه؟ نجهز رسالة الحجز فوراً" : "What is your concern? We prepare the booking message"}</h2>
+        <p className="section-label"><EditableText as="span" target={{ group: "siteText", field: `quizLabel${suffix}` }}>{label}</EditableText></p>
+        <EditableText as="h2" target={{ group: "siteText", field: `quizTitle${suffix}` }}>{title}</EditableText>
       </div>
       <div className="quiz-card">
         <div className="quiz-options">
           {options.map((option) => (
             <button className={issue === option.key ? "active" : ""} type="button" key={option.key} onClick={() => setIssue(option.key || "")}>
-              {isArabic ? option.labelAr : option.labelEn}
+              <EditableText as="button-label" target={{ group: "builderConfig", field: `quizOptions.${options.indexOf(option)}.label${suffix}` }}>{isArabic ? option.labelAr : option.labelEn}</EditableText>
             </button>
           ))}
         </div>
@@ -1595,7 +1761,7 @@ function QuickConsultQuiz({ isArabic, builder }: { isArabic: boolean; builder?: 
           </select>
           <a className="primary-button" href={whatsappLink(message)} target="_blank" rel="noreferrer">
             <WhatsAppIcon size={18} />
-            {isArabic ? "افتح واتساب بالرسالة" : "Open WhatsApp Message"}
+            <EditableText as="button-label" target={{ group: "siteText", field: `quizButton${suffix}` }}>{buttonText}</EditableText>
           </a>
         </div>
       </div>
@@ -1611,13 +1777,14 @@ function SmilePreviewCta({ isArabic, builder }: { isArabic: boolean; builder?: B
   const message = isArabic
     ? `مرحباً، عايز أعرف أنسب حل لابتسامتي.\nالاسم: ${name || "-"}\nالمشكلة: ${problem || "-"}${fileName ? `\nعندي صورة باسم: ${fileName} وهرفعها في المحادثة.` : ""}`
     : `Hello, I would like to know the best solution for my smile.\nName: ${name || "-"}\nConcern: ${problem || "-"}${fileName ? `\nI have a photo named: ${fileName} and will upload it in the chat.` : ""}`;
+  const suffix = isArabic ? "Ar" : "En";
 
   return (
     <section className="smile-preview">
       <div>
-        <p className="section-label">{isArabic ? (section.labelAr || "Smile Preview") : (section.labelEn || "Smile Preview")}</p>
-        <h2>{isArabic ? (section.titleAr || "عايز تعرف أنسب حل لابتسامتك؟") : (section.titleEn || "Want to know the right smile solution?")}</h2>
-        <p>{isArabic ? (section.textAr || "اكتب المشكلة، ولو عندك صورة ارفعها بعد فتح واتساب.") : (section.textEn || "Write the concern, and upload a photo after WhatsApp opens.")}</p>
+        <p className="section-label"><EditableText as="span" target={{ group: "builderConfig", field: `previewSection.label${suffix}` }}>{isArabic ? (section.labelAr || "Smile Preview") : (section.labelEn || "Smile Preview")}</EditableText></p>
+        <EditableText as="h2" target={{ group: "builderConfig", field: `previewSection.title${suffix}` }}>{isArabic ? (section.titleAr || "عايز تعرف أنسب حل لابتسامتك؟") : (section.titleEn || "Want to know the right smile solution?")}</EditableText>
+        <EditableText as="p" target={{ group: "builderConfig", field: `previewSection.text${suffix}` }}>{isArabic ? (section.textAr || "اكتب المشكلة، ولو عندك صورة ارفعها بعد فتح واتساب.") : (section.textEn || "Write the concern, and upload a photo after WhatsApp opens.")}</EditableText>
       </div>
       <form className="preview-form">
         <input value={name} onChange={(event) => setName(event.target.value)} placeholder={isArabic ? (section.namePlaceholderAr || "اسمك") : (section.namePlaceholderEn || "Your name")} />
@@ -1625,7 +1792,7 @@ function SmilePreviewCta({ isArabic, builder }: { isArabic: boolean; builder?: B
         <input type="file" accept="image/*" onChange={(event) => setFileName(event.target.files?.[0]?.name || "")} />
         <a className="primary-button" href={whatsappLink(message)} target="_blank" rel="noreferrer">
           <WhatsAppIcon size={18} />
-          {isArabic ? (section.buttonAr || "إرسال على واتساب") : (section.buttonEn || "Send via WhatsApp")}
+          <EditableText as="button-label" target={{ group: "builderConfig", field: `previewSection.button${suffix}` }}>{isArabic ? (section.buttonAr || "إرسال على واتساب") : (section.buttonEn || "Send via WhatsApp")}</EditableText>
         </a>
       </form>
     </section>
@@ -1644,16 +1811,16 @@ function PatientComfortSection({ isArabic, siteText = {}, builder }: { isArabic:
   return (
     <section className="creative-section comfort-section trust-choice-section">
       <div className="creative-head">
-        <p className="section-label">{siteCopy(isArabic ? "trustLabelAr" : "trustLabelEn", isArabic ? "ليه تختار العيادة؟" : "Why Choose the Clinic?")}</p>
-        <h2>{siteCopy(isArabic ? "trustTitleAr" : "trustTitleEn", isArabic ? "ثقة مبنية على وضوح وراحة ومتابعة" : "Trust Built on Clarity, Comfort, and Follow-up")}</h2>
-        <p>{siteCopy(isArabic ? "trustTextAr" : "trustTextEn", isArabic ? "التجربة مش علاج بس؛ المهم إنك تفهم حالتك وتدخل كل خطوة وأنت مطمئن." : "Care is not only treatment; it is understanding your case and feeling confident at every step.")}</p>
+        <p className="section-label"><EditableText as="span" target={{ group: "siteText", field: isArabic ? "trustLabelAr" : "trustLabelEn" }}>{siteCopy(isArabic ? "trustLabelAr" : "trustLabelEn", isArabic ? "ليه تختار العيادة؟" : "Why Choose the Clinic?")}</EditableText></p>
+        <EditableText as="h2" target={{ group: "siteText", field: isArabic ? "trustTitleAr" : "trustTitleEn" }}>{siteCopy(isArabic ? "trustTitleAr" : "trustTitleEn", isArabic ? "ثقة مبنية على وضوح وراحة ومتابعة" : "Trust Built on Clarity, Comfort, and Follow-up")}</EditableText>
+        <EditableText as="p" target={{ group: "siteText", field: isArabic ? "trustTextAr" : "trustTextEn" }}>{siteCopy(isArabic ? "trustTextAr" : "trustTextEn", isArabic ? "التجربة مش علاج بس؛ المهم إنك تفهم حالتك وتدخل كل خطوة وأنت مطمئن." : "Care is not only treatment; it is understanding your case and feeling confident at every step.")}</EditableText>
       </div>
       <div className="comfort-grid">
         {items.map((item, index) => (
           <article key={`${item.ar || item.en}-${index}`}>
-            <img src={item.image || "/icons/comfort-face.png"} alt="" aria-hidden="true" loading="lazy" />
-            <strong>{localizedPair(item, isArabic)}</strong>
-            <p>{isArabic ? (item.textAr || "") : (item.textEn || item.textAr || "")}</p>
+            <LiveEditableImage target={{ group: "builderConfig", field: `comfortItems.${index}.image`, type: "image" }} src={item.image || "/icons/comfort-face.png"} alt="" decorative loading="lazy" />
+            <EditableText as="strong" target={{ group: "builderConfig", field: `comfortItems.${index}.${isArabic ? "ar" : "en"}` }}>{localizedPair(item, isArabic)}</EditableText>
+            <EditableText as="p" target={{ group: "builderConfig", field: `comfortItems.${index}.${isArabic ? "textAr" : "textEn"}` }}>{isArabic ? (item.textAr || "") : (item.textEn || item.textAr || "")}</EditableText>
           </article>
         ))}
       </div>
@@ -2383,18 +2550,21 @@ function Footer({ t, settings, config }: { t: (typeof copy)[Lang]; settings: Sit
   const logo = config?.logo || "/brand/logo-transparent.png";
   const footerText = isArabic ? (config?.footerTextAr || t.footer) : (config?.footerTextEn || t.footer);
   const showSocial = config?.showSocial !== false;
+  const copyrightText = isArabic
+    ? (config?.copyrightAr || "© 2026 Dr. Amr Elshamy Dental Clinic. جميع الحقوق محفوظة.")
+    : (config?.copyrightEn || "© 2026 Dr. Amr Elshamy Dental Clinic. All rights reserved.");
 
   return (
     <footer className="site-footer">
       <div className="footer-main">
         <div className="footer-brand">
-          <img src={logo} alt="Dr. Amr Elshamy logo" loading="lazy" />
-          <p>{footerText}</p>
+          <LiveEditableImage target={{ group: "headerFooterConfig", field: "logo", type: "image" }} src={logo} alt="Dr. Amr Elshamy logo" loading="lazy" />
+          <EditableText as="p" target={{ group: "headerFooterConfig", field: isArabic ? "footerTextAr" : "footerTextEn" }}>{footerText}</EditableText>
           {showSocial ? <div className="socials">
-            <a className="facebook-social" href={settings.facebookUrl} target="_blank" rel="noreferrer" aria-label="Facebook"><FacebookIcon /></a>
-            <a className="instagram-social" href={settings.instagramUrl} target="_blank" rel="noreferrer" aria-label="Instagram"><InstagramIcon /></a>
-            <a className="tiktok-social" href={settings.tiktokUrl} target="_blank" rel="noreferrer" aria-label="TikTok"><TikTokIcon /></a>
-            <a className="whatsapp-social" href={`https://wa.me/${settings.whatsappPhone}`} target="_blank" rel="noreferrer" aria-label="WhatsApp"><WhatsAppIcon /></a>
+            <EditableLink className="facebook-social" href={settings.facebookUrl} target="_blank" rel="noreferrer" ariaLabel="Facebook" text="Facebook" hrefTarget={{ group: "siteSettings", field: "facebookUrl", type: "link" }}><FacebookIcon /></EditableLink>
+            <EditableLink className="instagram-social" href={settings.instagramUrl} target="_blank" rel="noreferrer" ariaLabel="Instagram" text="Instagram" hrefTarget={{ group: "siteSettings", field: "instagramUrl", type: "link" }}><InstagramIcon /></EditableLink>
+            <EditableLink className="tiktok-social" href={settings.tiktokUrl} target="_blank" rel="noreferrer" ariaLabel="TikTok" text="TikTok" hrefTarget={{ group: "siteSettings", field: "tiktokUrl", type: "link" }}><TikTokIcon /></EditableLink>
+            <EditableLink className="whatsapp-social" href={`https://wa.me/${settings.whatsappPhone}`} target="_blank" rel="noreferrer" ariaLabel="WhatsApp" text={settings.whatsappPhone} textTarget={{ group: "siteSettings", field: "whatsappPhone" }}><WhatsAppIcon /></EditableLink>
           </div> : null}
         </div>
 
@@ -2405,36 +2575,65 @@ function Footer({ t, settings, config }: { t: (typeof copy)[Lang]; settings: Sit
             loading="lazy"
             referrerPolicy="no-referrer-when-downgrade"
           />
-          <a href={settings.mapUrl} target="_blank" rel="noreferrer"><MapPin size={16} /> {isArabic ? "افتح الموقع على Google Maps" : "Open in Google Maps"}</a>
+          <EditableLink
+            href={settings.mapUrl}
+            target="_blank"
+            rel="noreferrer"
+            text={isArabic ? "افتح الموقع على Google Maps" : "Open in Google Maps"}
+            textTarget={{ group: "headerFooterConfig", field: isArabic ? "mapLinkTextAr" : "mapLinkTextEn" }}
+            hrefTarget={{ group: "siteSettings", field: "mapUrl", type: "link" }}
+          >
+            <MapPin size={16} /> {isArabic ? ((config as Record<string, string> | undefined)?.mapLinkTextAr || "افتح الموقع على Google Maps") : ((config as Record<string, string> | undefined)?.mapLinkTextEn || "Open in Google Maps")}
+          </EditableLink>
         </div>
 
         <div className="footer-links-panel">
           <div className="footer-col">
-            <h3>{isArabic ? "روابط سريعة" : "Quick Links"}</h3>
+            <EditableText as="h3" target={{ group: "headerFooterConfig", field: isArabic ? "quickLinksTitleAr" : "quickLinksTitleEn" }}>{isArabic ? ((config as Record<string, string> | undefined)?.quickLinksTitleAr || "روابط سريعة") : ((config as Record<string, string> | undefined)?.quickLinksTitleEn || "Quick Links")}</EditableText>
             {quickLinks.map((item) => (
-              <a href={item.href} key={item.href}>{isArabic ? item.ar : item.en}</a>
+              <EditableLink
+                href={navHref(item, config)}
+                key={item.href}
+                text={navText(item, config, isArabic)}
+                textTarget={{ group: "headerFooterConfig", field: `navLabels.${item.page}.${isArabic ? "ar" : "en"}` }}
+                hrefTarget={{ group: "headerFooterConfig", field: `navHrefs.${item.page}`, type: "link" }}
+              />
             ))}
           </div>
 
           <div className="footer-col">
-            <h3>{isArabic ? "خدماتنا" : "Our Services"}</h3>
-            {footerServices.map((service) => (
-              <a href="/services" key={service[0]}>{isArabic ? service[1] : service[0]}</a>
+            <EditableText as="h3" target={{ group: "headerFooterConfig", field: isArabic ? "footerServicesTitleAr" : "footerServicesTitleEn" }}>{isArabic ? ((config as Record<string, string> | undefined)?.footerServicesTitleAr || "خدماتنا") : ((config as Record<string, string> | undefined)?.footerServicesTitleEn || "Our Services")}</EditableText>
+            {footerServices.map((service, index) => (
+              <EditableLink
+                href={config?.footerServiceHrefs?.[String(index)] || `/services/${serviceSlugs[index] || ""}`}
+                key={service[0]}
+                text={isArabic ? (config?.footerServiceLabels?.[String(index)]?.ar || service[1]) : (config?.footerServiceLabels?.[String(index)]?.en || service[0])}
+                textTarget={{ group: "headerFooterConfig", field: `footerServiceLabels.${index}.${isArabic ? "ar" : "en"}` }}
+                hrefTarget={{ group: "headerFooterConfig", field: `footerServiceHrefs.${index}`, type: "link" }}
+              />
             ))}
           </div>
 
           <div className="footer-col contact-footer">
-            <h3>{isArabic ? "تواصل معنا" : "Contact Us"}</h3>
-            <a className="phone-link" href={`tel:${settings.phonePrimary}`}><Phone size={16} /> <span className="phone-number">{settings.phonePrimary}</span></a>
-            <a className="phone-link" href={`tel:${settings.phoneSecondary}`}><Phone size={16} /> <span className="phone-number">{settings.phoneSecondary}</span></a>
-            <a href={`https://wa.me/${settings.whatsappPhone}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={16} /> {isArabic ? "الحجز عبر واتساب" : "Book via WhatsApp"}</a>
-            <a href="/admin"><Lock size={16} /> {t.admin}</a>
+            <EditableText as="h3" target={{ group: "headerFooterConfig", field: isArabic ? "contactTitleAr" : "contactTitleEn" }}>{isArabic ? ((config as Record<string, string> | undefined)?.contactTitleAr || "تواصل معنا") : ((config as Record<string, string> | undefined)?.contactTitleEn || "Contact Us")}</EditableText>
+            <EditableLink className="phone-link" href={`tel:${settings.phonePrimary}`} text={settings.phonePrimary} textTarget={{ group: "siteSettings", field: "phonePrimary" }}><Phone size={16} /> <span className="phone-number">{settings.phonePrimary}</span></EditableLink>
+            <EditableLink className="phone-link" href={`tel:${settings.phoneSecondary}`} text={settings.phoneSecondary} textTarget={{ group: "siteSettings", field: "phoneSecondary" }}><Phone size={16} /> <span className="phone-number">{settings.phoneSecondary}</span></EditableLink>
+            <EditableLink
+              href={`https://wa.me/${settings.whatsappPhone}`}
+              target="_blank"
+              rel="noreferrer"
+              text={isArabic ? ((config as Record<string, string> | undefined)?.footerWhatsappTextAr || "الحجز عبر واتساب") : ((config as Record<string, string> | undefined)?.footerWhatsappTextEn || "Book via WhatsApp")}
+              textTarget={{ group: "headerFooterConfig", field: isArabic ? "footerWhatsappTextAr" : "footerWhatsappTextEn" }}
+            >
+              <WhatsAppIcon size={16} /> {isArabic ? ((config as Record<string, string> | undefined)?.footerWhatsappTextAr || "الحجز عبر واتساب") : ((config as Record<string, string> | undefined)?.footerWhatsappTextEn || "Book via WhatsApp")}
+            </EditableLink>
+            <EditableLink href={(config as Record<string, string> | undefined)?.adminHref || "/admin"} text={t.admin} textTarget={{ group: "headerFooterConfig", field: isArabic ? "adminLinkTextAr" : "adminLinkTextEn" }} hrefTarget={{ group: "headerFooterConfig", field: "adminHref", type: "link" }}><Lock size={16} /> {isArabic ? ((config as Record<string, string> | undefined)?.adminLinkTextAr || t.admin) : ((config as Record<string, string> | undefined)?.adminLinkTextEn || t.admin)}</EditableLink>
           </div>
         </div>
       </div>
 
       <div className="footer-bottom">
-        <span>© 2026 Dr. Amr Elshamy Dental Clinic. {isArabic ? "جميع الحقوق محفوظة." : "All rights reserved."}</span>
+        <EditableText as="span" target={{ group: "headerFooterConfig", field: isArabic ? "copyrightAr" : "copyrightEn" }}>{copyrightText}</EditableText>
       </div>
     </footer>
   );
