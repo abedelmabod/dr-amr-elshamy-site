@@ -743,7 +743,8 @@
 }
 
 .live-edit-modal textarea,
-.live-edit-modal input {
+.live-edit-modal input,
+.live-edit-modal select {
   width: 100%;
   min-height: 44px;
   border: 1px solid rgba(17, 24, 39, 0.14);
@@ -753,6 +754,10 @@
   color: #111827;
   font: inherit;
   font-weight: 700;
+}
+
+.live-edit-modal select {
+  appearance: auto;
 }
 
 .live-edit-modal textarea {
@@ -857,13 +862,35 @@
   opacity: 1;
 }
 
-.live-edit-json-modal textarea {
-  min-height: 280px;
-  direction: ltr;
-  text-align: left;
-  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
-  font-size: 13px;
-  line-height: 1.65;
+.live-edit-data-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.live-edit-data-fields label:has(textarea),
+.live-edit-data-fields label:has([name="body"]) {
+  grid-column: 1 / -1;
+}
+
+.live-edit-data-fields textarea {
+  min-height: 96px;
+}
+
+.live-edit-check-field {
+  align-content: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 58px;
+  padding: 10px 12px;
+  border: 1px solid rgba(212, 175, 55, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 250, 238, 0.72);
+}
+
+.live-edit-check-field input {
+  width: 20px;
+  min-height: 20px;
+  accent-color: var(--gold);
 }
 
 .live-edit-modal-actions {
@@ -942,10 +969,16 @@
 }
 
 :root[data-theme="dark"] .live-edit-modal textarea,
-:root[data-theme="dark"] .live-edit-modal input {
+:root[data-theme="dark"] .live-edit-modal input,
+:root[data-theme="dark"] .live-edit-modal select {
   background: rgba(2, 6, 23, 0.92);
   color: #f8fafc;
   border-color: rgba(212, 175, 55, 0.28);
+}
+
+:root[data-theme="dark"] .live-edit-check-field {
+  background: rgba(2, 6, 23, 0.58);
+  border-color: rgba(212, 175, 55, 0.24);
 }
 
 :root[data-theme="dark"] .live-edit-icon-modal > strong {

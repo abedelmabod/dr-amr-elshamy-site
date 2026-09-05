@@ -1548,6 +1548,132 @@ function LiveEditableIcon({ target, value, size = 18 }: { target: LiveEditTarget
   );
 }
 
+type DataCardField = {
+  path: string;
+  label: string;
+  value: string | boolean;
+  kind: "text" | "textarea" | "number" | "checkbox" | "select" | "image";
+  readonly?: boolean;
+};
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function dataCardLabel(path: string) {
+  const parts = path.split(".");
+  const last = parts[parts.length - 1] || path;
+  const labels: Record<string, string> = {
+    id: "ID",
+    name: "الاسم",
+    title: "العنوان",
+    titleAr: "العنوان عربي",
+    titleEn: "العنوان إنجليزي",
+    slug: "رابط الصفحة",
+    category: "التصنيف",
+    author: "الكاتب",
+    message: "نص الرأي",
+    rating: "التقييم",
+    status: "الحالة",
+    body: "المحتوى",
+    conclusion: "فوتر المقال",
+    metaDescription: "وصف SEO",
+    excerptAr: "مختصر عربي",
+    excerptEn: "مختصر إنجليزي",
+    coverImage: "صورة المقال",
+    beforeImage: "صورة قبل",
+    afterImage: "صورة بعد",
+    duration: "المدة",
+    featured: "مميز",
+    descriptionAr: "الوصف عربي",
+    descriptionEn: "الوصف إنجليزي",
+    whatsappMessageAr: "رسالة واتساب عربي",
+    whatsappMessageEn: "رسالة واتساب إنجليزي",
+    questionAr: "السؤال عربي",
+    questionEn: "السؤال إنجليزي",
+    answerAr: "الإجابة عربي",
+    answerEn: "الإجابة إنجليزي",
+    page: "الصفحة",
+    sortOrder: "الترتيب",
+    icon: "الأيقونة",
+  };
+  const prefix = parts.length > 1 && /^\d+$/.test(parts[parts.length - 2]) ? `#${Number(parts[parts.length - 2]) + 1} - ` : "";
+  return `${prefix}${labels[last] || last.replace(/([A-Z])/g, " $1").trim()}`;
+}
+
+function dataCardFieldKind(path: string, value: unknown): DataCardField["kind"] {
+  const key = path.toLowerCase();
+  if (typeof value === "boolean") return "checkbox";
+  if (typeof value === "number") return "number";
+  if (key.endsWith("status")) return "select";
+  if (/image|photo|cover|before|after|icon/.test(key)) return "image";
+  if (/body|message|description|excerpt|answer|question|conclusion|meta/.test(key) || String(value || "").length > 90) return "textarea";
+  return "text";
+}
+
+function flattenDataCardFields(source: Record<string, unknown>, prefix = ""): DataCardField[] {
+  return Object.entries(source).flatMap(([key, value]) => {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (Array.isArray(value)) {
+      return value.flatMap((item, index) => (
+        isPlainRecord(item)
+          ? flattenDataCardFields(item, `${path}.${index}`)
+          : [{ path: `${path}.${index}`, label: dataCardLabel(`${path}.${index}`), value: String(item ?? ""), kind: dataCardFieldKind(path, item) }]
+      ));
+    }
+    if (isPlainRecord(value)) return flattenDataCardFields(value, path);
+    if (value === undefined || value === null) {
+      return [{ path, label: dataCardLabel(path), value: "", kind: dataCardFieldKind(path, value), readonly: path === "id" }];
+    }
+    return [{ path, label: dataCardLabel(path), value: typeof value === "boolean" ? value : String(value), kind: dataCardFieldKind(path, value), readonly: path === "id" }];
+  });
+}
+
+function getPathValue(source: unknown, path: string) {
+  return path.split(".").reduce<unknown>((current, part) => {
+    if (Array.isArray(current)) return current[Number(part)];
+    if (isPlainRecord(current)) return current[part];
+    return undefined;
+  }, source);
+}
+
+function setPathValue(target: Record<string, unknown>, path: string, value: unknown) {
+  const parts = path.split(".");
+  let cursor: Record<string, unknown> | unknown[] = target;
+  parts.forEach((part, index) => {
+    const last = index === parts.length - 1;
+    if (last) {
+      if (Array.isArray(cursor)) cursor[Number(part)] = value;
+      else cursor[part] = value;
+      return;
+    }
+    const nextPart = parts[index + 1];
+    const nextIsArray = /^\d+$/.test(nextPart);
+    if (Array.isArray(cursor)) {
+      const itemIndex = Number(part);
+      if (!cursor[itemIndex]) cursor[itemIndex] = nextIsArray ? [] : {};
+      cursor = cursor[itemIndex] as Record<string, unknown> | unknown[];
+      return;
+    }
+    if (!cursor[part]) cursor[part] = nextIsArray ? [] : {};
+    cursor = cursor[part] as Record<string, unknown> | unknown[];
+  });
+}
+
+function buildDataCardPayload(source: Record<string, unknown>, values: Record<string, string | boolean>) {
+  const next = JSON.parse(JSON.stringify(source)) as Record<string, unknown>;
+  Object.entries(values).forEach(([path, value]) => {
+    const original = getPathValue(source, path);
+    const coercedValue = typeof original === "number"
+      ? Number(value || 0)
+      : typeof original === "boolean"
+        ? Boolean(value)
+        : value;
+    setPathValue(next, path, coercedValue);
+  });
+  return next;
+}
+
 function LiveEditableDataCard({
   children,
   className,
@@ -1564,16 +1690,17 @@ function LiveEditableDataCard({
   const live = useContext(LiveEditContext);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalStyle, setModalStyle] = useState<CSSProperties>({});
-  const [jsonValue, setJsonValue] = useState(JSON.stringify(payload, null, 2));
+  const fields = useMemo(() => flattenDataCardFields(payload), [payload]);
+  const [fieldValues, setFieldValues] = useState<Record<string, string | boolean>>({});
   const [error, setError] = useState("");
 
   useEffect(() => {
-    setJsonValue(JSON.stringify(payload, null, 2));
-  }, [payload]);
+    setFieldValues(Object.fromEntries(fields.map((field) => [field.path, field.value])));
+  }, [fields]);
 
   async function save() {
     try {
-      const parsed = JSON.parse(jsonValue) as Record<string, unknown>;
+      const parsed = buildDataCardPayload(payload, fieldValues);
       const response = await fetch(endpoint, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -1583,8 +1710,12 @@ function LiveEditableDataCard({
       setError("");
       setModalOpen(false);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Invalid JSON");
+      setError(saveError instanceof Error ? saveError.message : "Could not save item");
     }
+  }
+
+  function setField(path: string, value: string | boolean) {
+    setFieldValues((current) => ({ ...current, [path]: value }));
   }
 
   if (!live.enabled) return <>{children}</>;
@@ -1605,12 +1736,30 @@ function LiveEditableDataCard({
       {children}
       <span className="live-edit-card-badge"><Edit3 size={14} /> {label}</span>
       {modalOpen ? (
-        <span className="live-edit-modal live-edit-json-modal" style={modalStyle} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+        <span className="live-edit-modal live-edit-data-modal" style={modalStyle} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
           <strong>{label}</strong>
-          <label>
-            <span>JSON</span>
-            <textarea value={jsonValue} onChange={(event) => setJsonValue(event.target.value)} spellCheck={false} />
-          </label>
+          <span className="live-edit-data-fields">
+            {fields.map((field) => (
+              <label className={field.kind === "checkbox" ? "live-edit-check-field" : ""} key={field.path}>
+                <span>{field.label}</span>
+                {field.kind === "checkbox" ? (
+                  <input type="checkbox" checked={Boolean(fieldValues[field.path])} onChange={(event) => setField(field.path, event.target.checked)} disabled={field.readonly} />
+                ) : field.kind === "select" ? (
+                  <select value={String(fieldValues[field.path] ?? "")} onChange={(event) => setField(field.path, event.target.value)} disabled={field.readonly}>
+                    <option value="published">منشور</option>
+                    <option value="approved">موافق عليه</option>
+                    <option value="pending">بانتظار الموافقة</option>
+                    <option value="draft">مسودة</option>
+                    <option value="rejected">مرفوض</option>
+                  </select>
+                ) : field.kind === "textarea" ? (
+                  <textarea value={String(fieldValues[field.path] ?? "")} onChange={(event) => setField(field.path, event.target.value)} disabled={field.readonly} />
+                ) : (
+                  <input type={field.kind === "number" ? "number" : "text"} value={String(fieldValues[field.path] ?? "")} onChange={(event) => setField(field.path, event.target.value)} disabled={field.readonly} />
+                )}
+              </label>
+            ))}
+          </span>
           {error ? <span className="admin-error">{error}</span> : null}
           <span className="live-edit-modal-actions">
             <button type="button" onClick={() => void save()}><Check size={15} /> Save</button>
