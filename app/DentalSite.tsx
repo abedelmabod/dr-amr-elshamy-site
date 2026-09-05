@@ -1087,9 +1087,13 @@ function HomePage({ t, isArabic, data, onBook }: { t: (typeof copy)[Lang]; isAra
   const siteCopy = (key: string, fallback: string) => String(siteText[key] || fallback);
   const hiddenSections = new Set(data.layoutConfig?.hiddenSections || []);
   const isHidden = (key: string) => hiddenSections.has(key);
-  const defaultSectionOrder = ["hero", "stats", "trust", "implant", "journey", "quiz", "preview", "comfort", "services", "reviews"];
+  const defaultSectionOrder = sectionControlOptions.map((item) => item[0]);
   const configuredSectionOrder = data.layoutConfig?.sections?.length ? data.layoutConfig.sections : defaultSectionOrder;
   const sectionOrder = [...configuredSectionOrder, ...defaultSectionOrder.filter((key) => !configuredSectionOrder.includes(key))];
+  const hiddenSectionKeys = [
+    ...sectionOrder.filter((key) => hiddenSections.has(key)),
+    ...Array.from(hiddenSections).filter((key) => !sectionOrder.includes(key)),
+  ];
   const moveServices = (direction: "prev" | "next") => {
     setServiceDirection(direction);
     setServiceSlide((current) => (current + (direction === "next" ? 1 : activeServices.length - 1)) % activeServices.length);
@@ -1204,7 +1208,12 @@ function HomePage({ t, isArabic, data, onBook }: { t: (typeof copy)[Lang]; isAra
     return null;
   };
 
-  return <>{sectionOrder.map((key) => renderHomeSection(key))}</>;
+  return (
+    <>
+      {sectionOrder.map((key) => renderHomeSection(key))}
+      <HiddenSectionsDock hiddenKeys={hiddenSectionKeys} isArabic={isArabic} />
+    </>
+  );
 }
 
 function PageIntro({ page, t, isArabic, siteText = {} }: { page: Page; t: (typeof copy)[Lang]; isArabic: boolean; siteText?: Record<string, string> }) {
@@ -1228,10 +1237,18 @@ function PageIntro({ page, t, isArabic, siteText = {} }: { page: Page; t: (typeo
 }
 
 function EditModeBar({ enabled, isArabic, onToggle }: { enabled: boolean; isArabic: boolean; onToggle: () => void }) {
+  function toggleEditMode() {
+    const nextEnabled = !enabled;
+    onToggle();
+    if (typeof window !== "undefined" && window.parent !== window) {
+      window.parent.postMessage({ type: "cms-edit-mode", enabled: nextEnabled }, window.location.origin);
+    }
+  }
+
   return (
     <div className={enabled ? "edit-mode-bar is-on" : "edit-mode-bar"}>
       <strong>{isArabic ? "وضع التعديل" : "Edit Mode"}</strong>
-      <button type="button" onClick={onToggle} aria-pressed={enabled}>
+      <button type="button" onClick={toggleEditMode} aria-pressed={enabled}>
         <span>{enabled ? "ON" : "OFF"}</span>
         <i aria-hidden="true" />
       </button>
@@ -1359,9 +1376,32 @@ function EditableSection({ id, label, children }: { id: string; label: string; c
         <strong>{label}</strong>
         <button type="button" aria-label="Move section up" onClick={() => void live.updateSection(id, "up")}>↑</button>
         <button type="button" aria-label="Move section down" onClick={() => void live.updateSection(id, "down")}>↓</button>
-        <button type="button" aria-label="Hide section" onClick={() => void live.updateSection(id, "hide")}><EyeOff size={15} /></button>
+        <button type="button" aria-label="Hide section" title="Hide section" onClick={() => void live.updateSection(id, "hide")}><EyeOff size={15} /></button>
       </div>
       {children}
+    </div>
+  );
+}
+
+function HiddenSectionsDock({ hiddenKeys, isArabic }: { hiddenKeys: string[]; isArabic: boolean }) {
+  const live = useContext(LiveEditContext);
+  if (!live.enabled || !hiddenKeys.length) return null;
+
+  return (
+    <div className="hidden-sections-dock" onClick={(event) => event.stopPropagation()}>
+      <strong>{isArabic ? "أقسام مخفية" : "Hidden Sections"}</strong>
+      <div>
+        {hiddenKeys.map((key) => {
+          const option = sectionControlOptions.find((item) => item[0] === key);
+          const label = option ? (isArabic ? option[1] : option[2]) : key;
+          return (
+            <button type="button" key={key} onClick={() => void live.updateSection(key, "hide")}>
+              <Eye size={15} />
+              {isArabic ? `إظهار ${label}` : `Show ${label}`}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -2411,6 +2451,7 @@ function AdminPage({ lang, t }: { lang: Lang; t: (typeof copy)[Lang] }) {
   const [activeView, setActiveView] = useState<AdminView>("home");
   const [session, setSession] = useState<AdminSessionInfo | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [liveViewFocused, setLiveViewFocused] = useState(false);
   const [previewTick, setPreviewTick] = useState(() => Date.now());
   const [stats, setStats] = useState({ totalVisitors: 0, publishedArticles: 0, activeServices: 0, pendingReviews: 0, draftArticles: 0, newBookings: 0, alerts: [] as string[] });
   const [adminError, setAdminError] = useState("");
@@ -2466,7 +2507,26 @@ function AdminPage({ lang, t }: { lang: Lang; t: (typeof copy)[Lang] }) {
 
   useEffect(() => {
     setPreviewTick(Date.now());
+    setLiveViewFocused(localStorage.getItem("cms-edit-mode") === "on");
   }, [previewPath]);
+
+  useEffect(() => {
+    function handleEditModeMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin) return;
+      const payload = event.data as { type?: string; enabled?: boolean };
+      if (payload?.type === "cms-edit-mode") setLiveViewFocused(Boolean(payload.enabled));
+    }
+    function handleEditModeStorage(event: StorageEvent) {
+      if (event.key === "cms-edit-mode") setLiveViewFocused(event.newValue === "on");
+    }
+
+    window.addEventListener("message", handleEditModeMessage);
+    window.addEventListener("storage", handleEditModeStorage);
+    return () => {
+      window.removeEventListener("message", handleEditModeMessage);
+      window.removeEventListener("storage", handleEditModeStorage);
+    };
+  }, []);
 
   if (checkingSession) {
     return (
@@ -2498,7 +2558,11 @@ function AdminPage({ lang, t }: { lang: Lang; t: (typeof copy)[Lang] }) {
   }
 
   return (
-    <section className={sidebarCollapsed ? "admin-page admin-dashboard-shell sidebar-collapsed" : "admin-page admin-dashboard-shell"}>
+    <section className={[
+      "admin-page admin-dashboard-shell",
+      sidebarCollapsed ? "sidebar-collapsed" : "",
+      liveViewFocused ? "admin-live-focus" : "",
+    ].filter(Boolean).join(" ")}>
       <AdminSidebar activeView={activeView} isArabic={isArabic} session={session} collapsed={sidebarCollapsed} onToggleCollapse={() => setSidebarCollapsed((current) => !current)} onNavigate={setActiveView} onLogout={logout} />
       <main className="admin-main-panel">
         <header className="admin-main-header">
@@ -2515,11 +2579,16 @@ function AdminPage({ lang, t }: { lang: Lang; t: (typeof copy)[Lang] }) {
             <a className="secondary-button admin-public-link" href="/" target="_blank" rel="noreferrer">
               {isArabic ? "عرض الموقع العام" : "View Public Site"}
             </a>
+            {previewPath ? (
+              <button className="secondary-button" type="button" onClick={() => setLiveViewFocused(true)}>
+                {isArabic ? "معاينة كاملة" : "Full Live View"}
+              </button>
+            ) : null}
             <button className="secondary-button" type="button" onClick={() => { setPreviewTick(Date.now()); void loadDashboard(); }}>{isArabic ? "تحديث" : "Refresh"}</button>
           </div>
         </header>
 
-        <AdminLiveWorkspace previewPath={previewPath} previewTick={previewTick} isArabic={isArabic}>
+        <AdminLiveWorkspace previewPath={previewPath} previewTick={previewTick} isArabic={isArabic} isFocused={liveViewFocused} onExitFocus={() => setLiveViewFocused(false)}>
           {activeView === "home" ? <AdminOverview stats={stats} isArabic={isArabic} /> : null}
           {activeView === "control" ? <ControlCenterManager isArabic={isArabic} /> : null}
           {activeView === "homeContent" ? <HomeContentManager isArabic={isArabic} /> : null}
@@ -2561,7 +2630,7 @@ function adminPreviewPath(view: AdminView) {
   return paths[view] || "";
 }
 
-function AdminLiveWorkspace({ children, previewPath, previewTick, isArabic }: { children: ReactNode; previewPath: string; previewTick: number; isArabic: boolean }) {
+function AdminLiveWorkspace({ children, previewPath, previewTick, isArabic, isFocused, onExitFocus }: { children: ReactNode; previewPath: string; previewTick: number; isArabic: boolean; isFocused: boolean; onExitFocus: () => void }) {
   if (!previewPath) return <>{children}</>;
   const separator = previewPath.includes("?") ? "&" : "?";
   const src = `${previewPath}${separator}cmsPreview=dr-amr-elshamy&previewVersion=${previewTick}`;
@@ -2570,6 +2639,11 @@ function AdminLiveWorkspace({ children, previewPath, previewTick, isArabic }: { 
     <div className="admin-live-workspace">
       <div className="admin-editor-zone">{children}</div>
       <aside className="admin-live-preview-card" aria-label={isArabic ? "معاينة مباشرة للموقع" : "Live website preview"}>
+        {isFocused ? (
+          <button className="admin-live-exit-button" type="button" onClick={onExitFocus}>
+            {isArabic ? "رجوع للوحة" : "Back to Dashboard"}
+          </button>
+        ) : null}
         <div className="admin-live-preview-head">
           <div>
             <strong>{isArabic ? "معاينة مباشرة" : "Live Preview"}</strong>
