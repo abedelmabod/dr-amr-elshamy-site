@@ -732,6 +732,23 @@
   box-shadow: 0 26px 80px rgba(17, 24, 39, 0.22);
   color: var(--charcoal);
   text-align: start;
+  isolation: isolate;
+  place-items: stretch;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.live-edit-modal,
+.live-edit-modal * {
+  box-sizing: border-box;
+}
+
+.live-edit-modal > * {
+  position: static;
+  inset: auto;
+  opacity: 1;
+  transform: none;
+  filter: none;
 }
 
 .live-edit-modal label {
@@ -754,6 +771,7 @@
   color: #111827;
   font: inherit;
   font-weight: 700;
+  text-align: inherit;
 }
 
 .live-edit-modal select {
@@ -897,20 +915,28 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .live-edit-modal-actions button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   min-height: 38px;
+  width: auto;
+  min-width: 92px;
   padding: 0 14px;
   border: 0;
   border-radius: 999px;
   background: var(--charcoal);
   color: #fff;
+  font-size: 14px;
+  line-height: 1;
   font-weight: 900;
   cursor: pointer;
+  transform: none;
+  letter-spacing: 0;
 }
 
 .live-edit-modal-actions button + button {
@@ -3504,7 +3530,17 @@ textarea:focus {
   transition: transform 420ms var(--ease), filter 420ms var(--ease);
 }
 
-.tour-card span {
+.tour-card > .live-edit-image {
+  display: block;
+  width: 100%;
+  height: 230px;
+}
+
+.tour-card > .live-edit-image > img {
+  height: 100%;
+}
+
+.tour-card > span:not(.live-edit-image) {
   position: absolute;
   inset: 0;
   display: grid;
@@ -3516,12 +3552,13 @@ textarea:focus {
   transition: opacity 240ms var(--ease);
 }
 
-.tour-card:hover img {
+.tour-card:hover > img,
+.tour-card:hover > .live-edit-image > img {
   transform: scale(1.06);
   filter: saturate(1.06) contrast(1.04);
 }
 
-.tour-card:hover span {
+.tour-card:hover > span:not(.live-edit-image) {
   opacity: 1;
 }
 
