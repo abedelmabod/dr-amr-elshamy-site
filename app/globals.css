@@ -9141,3 +9141,69 @@ body:has(.admin-live-focus) .route-stage {
   border: 1px solid rgba(245, 212, 119, 0.24);
 }
 
+/* Live edit mode must feel stable: freeze visitor hover animations while editing. */
+.live-edit-enabled :is(
+  .main-header,
+  .brand-logo,
+  .book-button,
+  .primary-button,
+  .secondary-button,
+  .hero-media img,
+  .stat-item,
+  .service-card,
+  .review-card,
+  .article-card,
+  .gateway-card,
+  .comfort-card,
+  .journey-step,
+  .patient-question-card,
+  .premium-case-card,
+  .gallery-item,
+  .tour-card,
+  .tour-card img,
+  .tour-card > .live-edit-image > img,
+  .about-photo-panel img,
+  .about-team-card,
+  .comparison-frame img,
+  .case-compare-pair figure img,
+  .review-shot,
+  .review-shot img,
+  .quick-actions a,
+  .whatsapp-float,
+  .round-arrow,
+  .footer-col a,
+  .socials a
+):hover {
+  transform: none !important;
+  filter: none !important;
+}
+
+.live-edit-enabled :is(
+  .service-card,
+  .review-card,
+  .article-card,
+  .gateway-card,
+  .comfort-card,
+  .patient-question-card,
+  .premium-case-card,
+  .gallery-item,
+  .tour-card,
+  .review-shot
+) {
+  transition: outline-color 0.16s ease, background-color 0.16s ease, border-color 0.16s ease !important;
+}
+
+.live-edit-enabled :is(.service-card::before, .review-card::before, .article-card::before),
+.live-edit-enabled .tour-card > span:not(.live-edit-image),
+.live-edit-enabled .review-shot::after {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.live-edit-enabled .review-screenshot-strip.has-expanded-review .review-shot:not(.is-expanded),
+.live-edit-enabled .review-shot.is-expanded {
+  opacity: 1 !important;
+  filter: none !important;
+  transform: none !important;
+}
+
