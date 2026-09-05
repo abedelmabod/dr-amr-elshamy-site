@@ -715,14 +715,14 @@
 
 .live-edit-modal {
   position: fixed;
-  top: 50%;
-  left: 50%;
+  top: var(--live-edit-popover-top, 72px);
+  left: var(--live-edit-popover-left, 16px);
   right: auto;
   z-index: 10000;
-  transform: translate(-50%, -50%);
+  transform: none;
   display: grid;
   gap: 12px;
-  width: min(560px, calc(100vw - 28px));
+  width: min(var(--live-edit-popover-width, 420px), calc(100vw - 24px));
   max-height: min(78vh, 720px);
   overflow: auto;
   padding: 16px;
@@ -8937,10 +8937,11 @@ body:has(.admin-live-focus) .route-stage {
 .live-edit-icon > .live-edit-modal,
 .live-edit-data-card > .live-edit-modal {
   position: fixed;
-  top: 50%;
-  left: 50%;
+  top: var(--live-edit-popover-top, 72px);
+  left: var(--live-edit-popover-left, 16px);
   right: auto;
-  transform: translate(-50%, -50%);
+  transform: none;
+  width: min(var(--live-edit-popover-width, 420px), calc(100vw - 24px));
 }
 
 .live-edit-enabled :is(.live-edit-modal, .live-edit-modal *) {

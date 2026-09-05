@@ -1352,9 +1352,34 @@ function isInsideLiveEditModal(event: SyntheticEvent<HTMLElement>) {
   return event.target instanceof Element && Boolean(event.target.closest(".live-edit-modal"));
 }
 
+function liveEditPopoverStyle(anchor: HTMLElement, width = 420, estimatedHeight = 260): CSSProperties {
+  if (typeof window === "undefined") return {};
+  const rect = anchor.getBoundingClientRect();
+  const edgeGap = 12;
+  const gap = 10;
+  const viewportWidth = window.innerWidth || 1280;
+  const viewportHeight = window.innerHeight || 720;
+  const isRtl = document.documentElement.dir === "rtl";
+  const idealLeft = isRtl ? rect.right - width : rect.left;
+  const maxLeft = Math.max(edgeGap, viewportWidth - width - edgeGap);
+  const left = Math.min(Math.max(edgeGap, idealLeft), maxLeft);
+  const belowTop = rect.bottom + gap;
+  const aboveTop = rect.top - estimatedHeight - gap;
+  const top = belowTop + estimatedHeight > viewportHeight
+    ? Math.max(edgeGap, aboveTop)
+    : Math.max(edgeGap, belowTop);
+
+  return {
+    "--live-edit-popover-left": `${left}px`,
+    "--live-edit-popover-top": `${top}px`,
+    "--live-edit-popover-width": `${Math.min(width, viewportWidth - edgeGap * 2)}px`,
+  } as CSSProperties;
+}
+
 function EditableText({ target, children, className, as = "span", valueOverride }: { target: LiveEditTarget; children: ReactNode; className?: string; as?: "span" | "p" | "h1" | "h2" | "h3" | "strong" | "button-label"; valueOverride?: string }) {
   const live = useContext(LiveEditContext);
   const [modalOpen, setModalOpen] = useState(false);
+  const [modalStyle, setModalStyle] = useState<CSSProperties>({});
   const [value, setValue] = useState("");
   const Tag = as === "button-label" ? "span" : as;
 
@@ -1375,6 +1400,7 @@ function EditableText({ target, children, className, as = "span", valueOverride 
       onClickCapture={(event) => {
         if (isInsideLiveEditModal(event)) return;
         interceptLiveEditClick(event);
+        setModalStyle(liveEditPopoverStyle(event.currentTarget, 420, 250));
         setModalOpen(true);
       }}
       data-live-edit="text"
@@ -1382,7 +1408,7 @@ function EditableText({ target, children, className, as = "span", valueOverride 
       {children}
       <Edit3 className="live-edit-pencil" size={15} aria-hidden="true" />
       {modalOpen ? (
-        <span className="live-edit-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+        <span className="live-edit-modal" style={modalStyle} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
           <label>
             <span>Text</span>
             <textarea value={value} onChange={(event) => setValue(event.target.value)} />
@@ -1422,6 +1448,7 @@ function EditableLink({
 }) {
   const live = useContext(LiveEditContext);
   const [modalOpen, setModalOpen] = useState(false);
+  const [modalStyle, setModalStyle] = useState<CSSProperties>({});
   const [labelValue, setLabelValue] = useState(text);
   const [hrefValue, setHrefValue] = useState(href);
 
@@ -1455,13 +1482,14 @@ function EditableLink({
       onClickCapture={(event) => {
         if (isInsideLiveEditModal(event)) return;
         interceptLiveEditClick(event);
+        setModalStyle(liveEditPopoverStyle(event.currentTarget, 440, 260));
         setModalOpen(true);
       }}
     >
       {children || text}
       <Edit3 className="live-edit-pencil" size={15} aria-hidden="true" />
       {modalOpen ? (
-        <span className="live-edit-modal live-edit-link-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+        <span className="live-edit-modal live-edit-link-modal" style={modalStyle} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
           {textTarget ? (
             <label>
               <span>Text</span>
@@ -1487,6 +1515,7 @@ function EditableLink({
 function LiveEditableIcon({ target, value, size = 18 }: { target: LiveEditTarget; value?: string; size?: number }) {
   const live = useContext(LiveEditContext);
   const [modalOpen, setModalOpen] = useState(false);
+  const [modalStyle, setModalStyle] = useState<CSSProperties>({});
   const [nextIcon, setNextIcon] = useState(value || "sparkles");
 
   useEffect(() => {
@@ -1508,13 +1537,14 @@ function LiveEditableIcon({ target, value, size = 18 }: { target: LiveEditTarget
       onClickCapture={(event) => {
         if (isInsideLiveEditModal(event)) return;
         interceptLiveEditClick(event);
+        setModalStyle(liveEditPopoverStyle(event.currentTarget, 460, 330));
         setModalOpen(true);
       }}
     >
       {builderIcon(nextIcon, size)}
       <Edit3 className="live-edit-pencil" size={13} aria-hidden="true" />
       {modalOpen ? (
-        <span className="live-edit-modal live-edit-icon-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+        <span className="live-edit-modal live-edit-icon-modal" style={modalStyle} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
           <strong>Icon</strong>
           <span className="live-edit-icon-grid">
             {cmsIconOptions.map((item) => (
@@ -1554,6 +1584,7 @@ function LiveEditableDataCard({
 }) {
   const live = useContext(LiveEditContext);
   const [modalOpen, setModalOpen] = useState(false);
+  const [modalStyle, setModalStyle] = useState<CSSProperties>({});
   const [jsonValue, setJsonValue] = useState(JSON.stringify(payload, null, 2));
   const [error, setError] = useState("");
 
@@ -1588,13 +1619,14 @@ function LiveEditableDataCard({
         const target = event.target instanceof Element ? event.target : null;
         if (target?.closest(".live-edit-text, .live-edit-image, .live-edit-link, .live-edit-icon")) return;
         interceptLiveEditClick(event);
+        setModalStyle(liveEditPopoverStyle(event.currentTarget, 560, 430));
         setModalOpen(true);
       }}
     >
       {children}
       <span className="live-edit-card-badge"><Edit3 size={14} /> {label}</span>
       {modalOpen ? (
-        <span className="live-edit-modal live-edit-json-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+        <span className="live-edit-modal live-edit-json-modal" style={modalStyle} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
           <strong>{label}</strong>
           <label>
             <span>JSON</span>
@@ -1614,6 +1646,7 @@ function LiveEditableDataCard({
 function LiveEditableImage({ target, src, alt, className, loading, decorative }: { target: LiveEditTarget; src: string; alt: string; className?: string; loading?: "lazy" | "eager"; decorative?: boolean }) {
   const live = useContext(LiveEditContext);
   const [modalOpen, setModalOpen] = useState(false);
+  const [modalStyle, setModalStyle] = useState<CSSProperties>({});
   const [url, setUrl] = useState(src);
 
   useEffect(() => {
@@ -1639,13 +1672,14 @@ function LiveEditableImage({ target, src, alt, className, loading, decorative }:
       onClickCapture={(event) => {
         if (isInsideLiveEditModal(event)) return;
         interceptLiveEditClick(event);
+        setModalStyle(liveEditPopoverStyle(event.currentTarget, 440, 420));
         setModalOpen(true);
       }}
     >
       <img className={className} src={src} alt={alt} loading={loading} aria-hidden={decorative ? "true" : undefined} />
       <span className="live-edit-image-badge"><ImageIcon size={15} /> تغيير</span>
       {modalOpen ? (
-        <span className="live-edit-modal live-edit-image-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+        <span className="live-edit-modal live-edit-image-modal" style={modalStyle} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
           <label>
             <span>Image URL</span>
             <input value={url} onChange={(event) => setUrl(event.target.value)} />
