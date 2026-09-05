@@ -1040,36 +1040,15 @@ function Header({
 
       <nav className={menuOpen ? "nav open" : "nav"} aria-label="Primary navigation">
         {orderedNav.map((item) => (
-          item.page === "services" ? (
-            <div className="nav-mega-wrap" key={item.href}>
-              <EditableLink
-                className={page === item.page || page === "service-detail" ? "active" : ""}
-                href={navHref(item, config)}
-                text={navText(item, config, isArabic)}
-                textTarget={{ group: "headerFooterConfig", field: `navLabels.${item.page}.${isArabic ? "ar" : "en"}` }}
-                hrefTarget={{ group: "headerFooterConfig", field: `navHrefs.${item.page}`, type: "link" }}
-                onClick={() => setMenuOpen(false)}
-              />
-              <div className="mega-menu">
-                {services.slice(0, 6).map((service, index) => (
-                  <a href={`/services/${serviceSlugs[index]}`} key={service[0]}>
-                    <img src={serviceIcons[index]} alt="" aria-hidden="true" loading="lazy" />
-                    <span>{isArabic ? service[1] : service[0]}</span>
-                  </a>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <EditableLink
-              className={page === item.page ? "active" : ""}
-              key={item.href}
-              href={navHref(item, config)}
-              text={navText(item, config, isArabic)}
-              textTarget={{ group: "headerFooterConfig", field: `navLabels.${item.page}.${isArabic ? "ar" : "en"}` }}
-              hrefTarget={{ group: "headerFooterConfig", field: `navHrefs.${item.page}`, type: "link" }}
-              onClick={() => setMenuOpen(false)}
-            />
-          )
+          <EditableLink
+            className={page === item.page || (item.page === "services" && page === "service-detail") ? "active" : ""}
+            key={item.href}
+            href={navHref(item, config)}
+            text={navText(item, config, isArabic)}
+            textTarget={{ group: "headerFooterConfig", field: `navLabels.${item.page}.${isArabic ? "ar" : "en"}` }}
+            hrefTarget={{ group: "headerFooterConfig", field: `navHrefs.${item.page}`, type: "link" }}
+            onClick={() => setMenuOpen(false)}
+          />
         ))}
       </nav>
 
