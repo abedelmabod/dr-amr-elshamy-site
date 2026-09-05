@@ -1,6 +1,6 @@
 import { getDb, isAdmin, logActivity, parseJsonSetting, readSettings } from "../../_lib";
 
-const allowedGroups = new Set(["siteText", "heroConfig", "headerFooterConfig", "builderConfig", "layoutConfig", "themeConfig", "bannerConfig", "siteSettings"]);
+const allowedGroups = new Set(["siteText", "heroConfig", "headerFooterConfig", "builderConfig", "layoutConfig", "themeConfig", "bannerConfig", "doctorProfile", "siteSettings"]);
 
 function sanitizeKey(value: unknown) {
   return String(value || "").trim().replace(/[^a-zA-Z0-9_.-]/g, "").slice(0, 120);

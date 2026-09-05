@@ -81,7 +81,7 @@ type DoctorProfile = {
   yearsExperience?: string;
   imageUrl?: string;
 };
-type FaqItem = { id: number; question_ar: string; question_en: string; answer_ar: string; answer_en: string; page: string; sort_order: number };
+type FaqItem = { id: number; question_ar: string; question_en: string; answer_ar: string; answer_en: string; page: string; sort_order: number; status?: string };
 type HeroConfig = Record<string, string>;
 type ThemeConfig = { gold?: string; bronze?: string; charcoal?: string; background?: string; darkModeEnabled?: boolean; buttonStyle?: string; cardRadius?: string; shadowLevel?: string; headingScale?: string; bodyScale?: string };
 type LayoutConfig = { sections?: string[]; hiddenSections?: string[]; previewMode?: boolean };
@@ -163,7 +163,7 @@ type AdminSessionInfo = {
   isSuperAdmin?: boolean;
 };
 type LiveEditTarget = {
-  group: "siteText" | "heroConfig" | "headerFooterConfig" | "builderConfig" | "layoutConfig" | "themeConfig" | "bannerConfig" | "siteSettings";
+  group: "siteText" | "heroConfig" | "headerFooterConfig" | "builderConfig" | "layoutConfig" | "themeConfig" | "bannerConfig" | "doctorProfile" | "siteSettings";
   field: string;
   type?: "text" | "image" | "link" | "background" | "icon";
 };
@@ -867,9 +867,9 @@ export function DentalSite({ page = "home", serviceSlug, article }: { page?: Pag
         {page === "service-detail" && serviceSlug ? <ServiceDetailPage slug={serviceSlug} isArabic={isArabic} settings={settings} data={data} /> : null}
         {page === "cases" ? <CasesPageLuxury data={data} isArabic={isArabic} /> : null}
         {page === "reviews" ? <ReviewsPage data={data} review={review} setReview={setReview} submitReview={submitReview} reviewSent={reviewSent} t={t} /> : null}
-        {page === "blog" && article ? <ArticleDetailPage article={article} isArabic={isArabic} builder={data.builderConfig} /> : null}
+        {page === "blog" && article ? <ArticleDetailPage article={article} isArabic={isArabic} builder={data.builderConfig} siteText={data.siteText} /> : null}
         {page === "blog" && !article ? <BlogPageLuxury data={data} isArabic={isArabic} /> : null}
-        {page === "contact" ? <ContactPageLuxury booking={booking} setBooking={setBooking} submitBooking={submitBooking} t={t} isArabic={isArabic} settings={settings} bookingSent={bookingSent} formConfig={data.formConfig} /> : null}
+        {page === "contact" ? <ContactPageLuxury booking={booking} setBooking={setBooking} submitBooking={submitBooking} t={t} isArabic={isArabic} settings={settings} bookingSent={bookingSent} formConfig={data.formConfig} siteText={data.siteText} /> : null}
         {page === "admin" ? <AdminPage lang={lang} t={t} /> : null}
         {page === "not-found" ? <NotFoundPage isArabic={isArabic} /> : null}
       </div>
@@ -2086,6 +2086,8 @@ function ReviewsPage({
   const visibleReviewShots = Array.from({ length: reviewScreenshotsPerPage }, (_, index) => pageStart + index + 1).filter(
     (shotNumber) => shotNumber <= reviewScreenshotCount,
   );
+  const isArabic = t.dir === "rtl";
+  const suffix = isArabic ? "Ar" : "En";
 
   const goToReviewPage = (page: number) => {
     setReviewPage(Math.min(Math.max(page, 1), reviewPages));
@@ -2145,15 +2147,29 @@ function ReviewsPage({
       </div>
       <div className="review-grid">
         {data.reviews.map((item) => (
-          <article className="review-card" key={item.id}>
-            <span className="stars">{"★".repeat(item.rating)}</span>
-            <p>{item.message}</p>
-            <strong>{item.name}</strong>
-          </article>
+          <LiveEditableDataCard
+            className="review-card-shell"
+            endpoint="/api/admin/reviews"
+            label={isArabic ? "تعديل الرأي" : "Edit review"}
+            key={item.id}
+            payload={{
+              id: item.id,
+              name: item.name,
+              rating: item.rating,
+              message: item.message,
+              status: item.status || "approved",
+            }}
+          >
+            <article className="review-card">
+              <span className="stars">{"★".repeat(item.rating)}</span>
+              <p>{item.message}</p>
+              <strong>{item.name}</strong>
+            </article>
+          </LiveEditableDataCard>
         ))}
       </div>
       <form className="review-form" onSubmit={submitReview}>
-        <h3>{t.addReview}</h3>
+        <EditableText as="h3" target={{ group: "siteText", field: `reviewFormTitle${suffix}` }}>{t.addReview}</EditableText>
         <input required value={review.name} onChange={(event) => setReview({ ...review, name: event.target.value })} placeholder={t.formName} />
         <select value={review.rating} onChange={(event) => setReview({ ...review, rating: Number(event.target.value) })}>
           {[5, 4, 3, 2, 1].map((rating) => <option value={rating} key={rating}>{rating} ★</option>)}
@@ -2161,7 +2177,9 @@ function ReviewsPage({
         <textarea required value={review.message} onChange={(event) => setReview({ ...review, message: event.target.value })} placeholder={t.formMessage} />
         <button className="primary-button" type="submit">{t.save}</button>
         <small className={reviewSent ? "success-message" : ""}>
-          {reviewSent ? (t.dir === "rtl" ? "تم إرسال رأيك بنجاح وسيظهر بعد موافقة الأدمن." : "Your review was sent successfully and will appear after admin approval.") : t.reviewHint}
+          <EditableText as="span" target={{ group: "siteText", field: reviewSent ? `reviewSuccess${suffix}` : `reviewHint${suffix}` }}>
+            {reviewSent ? (isArabic ? "تم إرسال رأيك بنجاح وسيظهر بعد موافقة الأدمن." : "Your review was sent successfully and will appear after admin approval.") : t.reviewHint}
+          </EditableText>
         </small>
       </form>
     </section>
@@ -2225,43 +2243,48 @@ function ContactPage({
 
 function AboutPageLuxury({ data, isArabic }: { data: SiteData; isArabic: boolean }) {
   const profile = data.doctorProfile || {};
+  const siteText = data.siteText || {};
   const tourImages = enabledItems(data.builderConfig?.clinicTour, clinicTour.map((image) => ({ image, enabled: true })));
+  const suffix = isArabic ? "Ar" : "En";
+  const aboutStoryLabelKey = `aboutStoryLabel${suffix}`;
+  const clinicTourLabelKey = `clinicTourLabel${suffix}`;
+  const clinicTourTitleKey = `clinicTourTitle${suffix}`;
   return (
     <>
       <section className="about-editorial page-content">
         <div className="about-photo-panel">
-          <img src={profile.imageUrl || "/brand/dr-amr.jpg"} alt={profile.nameEn || "Dr. Amr Elshamy"} />
+          <LiveEditableImage target={{ group: "doctorProfile", field: "imageUrl", type: "image" }} src={profile.imageUrl || "/brand/dr-amr.jpg"} alt={profile.nameEn || "Dr. Amr Elshamy"} />
         </div>
         <div className="about-story">
-          <p className="section-label">Luxury Medical Care</p>
-          <h2>{isArabic ? (profile.titleAr || "تجربة علاج مريحة وواضحة بمعايير عيادة فاخرة") : (profile.titleEn || "Clear, Comfortable Dental Care With a Luxury Clinic Standard")}</h2>
-          <p>
+          <p className="section-label"><EditableText as="span" target={{ group: "siteText", field: aboutStoryLabelKey }}>{siteText[aboutStoryLabelKey] || (isArabic ? "رعاية طبية فاخرة" : "Luxury Medical Care")}</EditableText></p>
+          <EditableText as="h2" target={{ group: "doctorProfile", field: isArabic ? "titleAr" : "titleEn" }}>{isArabic ? (profile.titleAr || "تجربة علاج مريحة وواضحة بمعايير عيادة فاخرة") : (profile.titleEn || "Clear, Comfortable Dental Care With a Luxury Clinic Standard")}</EditableText>
+          <EditableText as="p" target={{ group: "doctorProfile", field: isArabic ? "bioAr" : "bioEn" }}>
             {isArabic
               ? (profile.bioAr || "دكتور عمرو الشامي هو صاحب العيادة، والهدف إن كل مريض يدخل وهو مطمن، يفهم حالته وخطة العلاج، ويحصل على نتيجة صحية وجمالية بدون توتر.")
               : (profile.bioEn || "Dr. Amr Elshamy owns the clinic and focuses on helping every patient feel comfortable, understand the case, and choose the right treatment plan without stress.")}
-          </p>
+          </EditableText>
           <div className="credential-grid">
             {[
-              [<SmilePlus size={18} key="cosmetic" />, isArabic ? "رعاية تجميلية" : "Cosmetic Care", isArabic ? "ابتسامة طبيعية بتفاصيل دقيقة" : "Natural smiles with precise detail"],
-              [<ShieldCheck size={18} key="sterile" />, isArabic ? "تعقيم متقدم" : "Advanced Sterilization", isArabic ? "مسار نظافة واضح في كل زيارة" : "A clear hygiene flow for every visit"],
-              [<ClipboardCheck size={18} key="plan" />, isArabic ? "خطة علاج" : "Treatment Planning", isArabic ? "شرح بسيط وخيارات مناسبة" : "Simple explanation and suitable options"],
+              { key: "cosmetic", icon: <SmilePlus size={18} />, title: isArabic ? "رعاية تجميلية" : "Cosmetic Care", text: isArabic ? "ابتسامة طبيعية بتفاصيل دقيقة" : "Natural smiles with precise detail" },
+              { key: "sterile", icon: <ShieldCheck size={18} />, title: isArabic ? "تعقيم متقدم" : "Advanced Sterilization", text: isArabic ? "مسار نظافة واضح في كل زيارة" : "A clear hygiene flow for every visit" },
+              { key: "plan", icon: <ClipboardCheck size={18} />, title: isArabic ? "خطة علاج" : "Treatment Planning", text: isArabic ? "شرح بسيط وخيارات مناسبة" : "Simple explanation and suitable options" },
             ].map((item) => (
-              <article key={String(item[1])}>
-                {item[0]}
-                <strong>{item[1]}</strong>
-                <span>{item[2]}</span>
+              <article key={item.key}>
+                {item.icon}
+                <EditableText as="strong" target={{ group: "siteText", field: `aboutCredential_${item.key}_title${suffix}` }}>{siteText[`aboutCredential_${item.key}_title${suffix}`] || item.title}</EditableText>
+                <EditableText as="span" target={{ group: "siteText", field: `aboutCredential_${item.key}_text${suffix}` }}>{siteText[`aboutCredential_${item.key}_text${suffix}`] || item.text}</EditableText>
               </article>
             ))}
           </div>
         </div>
       </section>
       <section className="tour-section">
-        <p className="section-label">{isArabic ? "جولة داخل العيادة" : "Clinic Virtual Tour"}</p>
-        <h2>{isArabic ? "مساحة علاج هادئة، نظيفة، وفاخرة" : "A Calm, Sterile, Premium Treatment Space"}</h2>
+        <p className="section-label"><EditableText as="span" target={{ group: "siteText", field: clinicTourLabelKey }}>{siteText[clinicTourLabelKey] || (isArabic ? "جولة داخل العيادة" : "Clinic Virtual Tour")}</EditableText></p>
+        <EditableText as="h2" target={{ group: "siteText", field: clinicTourTitleKey }}>{siteText[clinicTourTitleKey] || (isArabic ? "مساحة علاج هادئة، نظيفة، وفاخرة" : "A Calm, Sterile, Premium Treatment Space")}</EditableText>
         <div className="tour-grid">
           {tourImages.map((item, index) => (
             <button className="tour-card" type="button" key={item.image || index}>
-              <img src={item.image || clinicTour[index % clinicTour.length]} alt={(isArabic ? item.altAr : item.altEn) || `Clinic tour ${index + 1}`} loading="lazy" />
+              <LiveEditableImage target={{ group: "builderConfig", field: `clinicTour.${index}.image`, type: "image" }} src={item.image || clinicTour[index % clinicTour.length]} alt={(isArabic ? item.altAr : item.altEn) || `Clinic tour ${index + 1}`} loading="lazy" />
               <span>+</span>
             </button>
           ))}
@@ -2281,57 +2304,61 @@ function CasesPageLuxury({ data, isArabic }: { data: SiteData; isArabic: boolean
   const featuredCase = cases.find((item) => item.featured) || cases[0];
   const selectedCase = selected ? parseCase(selected) : null;
   const pageCopy = data.builderConfig?.casesPage || {};
+  const suffix = isArabic ? "Ar" : "En";
+  const siteText = data.siteText || {};
+  const featuredBeforeImage = siteText.featuredCaseBeforeImage || featuredCase.beforeImage;
+  const featuredAfterImage = siteText.featuredCaseAfterImage || featuredCase.afterImage;
 
   return (
     <section className="section-block page-content cases-luxury-page">
       <div className="cases-editorial-head">
         <div>
-          <p className="section-label"><Sparkles size={16} /> {isArabic ? (pageCopy.labelAr || "معرض الابتسامات") : (pageCopy.labelEn || "Smile Transformations")}</p>
-          <h2>{isArabic ? (pageCopy.titleAr || "نتائج قبل وبعد بتفاصيل واضحة") : (pageCopy.titleEn || "Before & After Results, Clearly Presented")}</h2>
-          <p>
+          <p className="section-label"><Sparkles size={16} /> <EditableText as="span" target={{ group: "builderConfig", field: `casesPage.label${suffix}` }}>{isArabic ? (pageCopy.labelAr || "معرض الابتسامات") : (pageCopy.labelEn || "Smile Transformations")}</EditableText></p>
+          <EditableText as="h2" target={{ group: "builderConfig", field: `casesPage.title${suffix}` }}>{isArabic ? (pageCopy.titleAr || "نتائج قبل وبعد بتفاصيل واضحة") : (pageCopy.titleEn || "Before & After Results, Clearly Presented")}</EditableText>
+          <EditableText as="p" target={{ group: "builderConfig", field: `casesPage.text${suffix}` }}>
             {isArabic
               ? (pageCopy.textAr || "كل حالة معروضة بطريقة تساعدك تشوف الفرق بهدوء: نوع العلاج، مدة التنفيذ، وصورة مقارنة تفاعلية بدون تشتيت.")
               : (pageCopy.textEn || "Each case is presented with a calm comparison experience: treatment type, duration, and an interactive result viewer.")}
-          </p>
+          </EditableText>
         </div>
         <div className="cases-proof-panel" aria-label={isArabic ? "مؤشرات الثقة" : "Trust indicators"}>
-          <span><ShieldCheck size={18} /> {isArabic ? (pageCopy.proof1Ar || "صور مسموح بعرضها") : (pageCopy.proof1En || "Approved clinical photos")}</span>
-          <span><ClipboardCheck size={18} /> {isArabic ? (pageCopy.proof2Ar || "تفاصيل علاج مختصرة") : (pageCopy.proof2En || "Clear treatment notes")}</span>
-          <span><SmilePlus size={18} /> {isArabic ? (pageCopy.proof3Ar || `${cases.length}+ حالة`) : (pageCopy.proof3En || `${cases.length}+ cases`)}</span>
+          <span><ShieldCheck size={18} /> <EditableText as="span" target={{ group: "builderConfig", field: `casesPage.proof1${suffix}` }}>{isArabic ? (pageCopy.proof1Ar || "صور مسموح بعرضها") : (pageCopy.proof1En || "Approved clinical photos")}</EditableText></span>
+          <span><ClipboardCheck size={18} /> <EditableText as="span" target={{ group: "builderConfig", field: `casesPage.proof2${suffix}` }}>{isArabic ? (pageCopy.proof2Ar || "تفاصيل علاج مختصرة") : (pageCopy.proof2En || "Clear treatment notes")}</EditableText></span>
+          <span><SmilePlus size={18} /> <EditableText as="span" target={{ group: "builderConfig", field: `casesPage.proof3${suffix}` }}>{isArabic ? (pageCopy.proof3Ar || `${cases.length}+ حالة`) : (pageCopy.proof3En || `${cases.length}+ cases`)}</EditableText></span>
         </div>
       </div>
 
       <div className="comparison-card cases-hero-comparison">
         <div className="cases-comparison-copy">
-          <small>{featuredCase.featured ? (isArabic ? "حالة مختارة" : "Selected case") : featuredCase.category}</small>
-          <h3>{isArabic && featuredCase.title.startsWith("Case") ? `حالة ${featuredCase.id}` : featuredCase.title}</h3>
-          <p>{isArabic ? "اعرض النتيجة بشكل مباشر: صورة قبل وصورة بعد جنب بعض عشان الفرق يبقى واضح من أول نظرة." : "View the transformation directly: before and after images side by side for an immediate comparison."}</p>
+          <small><EditableText as="span" target={{ group: "siteText", field: `featuredCaseLabel${suffix}` }}>{siteText[`featuredCaseLabel${suffix}`] || (featuredCase.featured ? (isArabic ? "حالة مختارة" : "Selected case") : featuredCase.category)}</EditableText></small>
+          <EditableText as="h3" target={{ group: "siteText", field: `featuredCaseTitle${suffix}` }}>{siteText[`featuredCaseTitle${suffix}`] || (isArabic && featuredCase.title.startsWith("Case") ? `حالة ${featuredCase.id}` : featuredCase.title)}</EditableText>
+          <EditableText as="p" target={{ group: "siteText", field: `featuredCaseText${suffix}` }}>{siteText[`featuredCaseText${suffix}`] || (isArabic ? "اعرض النتيجة بشكل مباشر: صورة قبل وصورة بعد جنب بعض عشان الفرق يبقى واضح من أول نظرة." : "View the transformation directly: before and after images side by side for an immediate comparison.")}</EditableText>
           <div>
-            <span>{isArabic ? "العلاج" : "Treatment"}: {featuredCase.category}</span>
-            <span>{isArabic ? "المدة" : "Duration"}: {featuredCase.duration}</span>
+            <span><EditableText as="span" target={{ group: "siteText", field: `caseTreatmentLabel${suffix}` }}>{siteText[`caseTreatmentLabel${suffix}`] || (isArabic ? "العلاج" : "Treatment")}</EditableText>: {featuredCase.category}</span>
+            <span><EditableText as="span" target={{ group: "siteText", field: `caseDurationLabel${suffix}` }}>{siteText[`caseDurationLabel${suffix}`] || (isArabic ? "المدة" : "Duration")}</EditableText>: {featuredCase.duration}</span>
           </div>
         </div>
         <div className="comparison-pair">
           <figure className="comparison-frame before-frame">
-            <img src={featuredCase.beforeImage} alt={`${featuredCase.title} before`} loading="lazy" />
-            <figcaption>{isArabic ? "قبل" : "Before"}</figcaption>
+            <LiveEditableImage target={{ group: "siteText", field: "featuredCaseBeforeImage", type: "image" }} src={featuredBeforeImage} alt={`${featuredCase.title} before`} loading="lazy" />
+            <figcaption><EditableText as="span" target={{ group: "siteText", field: `beforeLabel${suffix}` }}>{siteText[`beforeLabel${suffix}`] || (isArabic ? "قبل" : "Before")}</EditableText></figcaption>
           </figure>
           <figure className="comparison-frame after-frame">
-            <img src={featuredCase.afterImage} alt={`${featuredCase.title} after`} loading="lazy" />
-            <figcaption>{isArabic ? "بعد" : "After"}</figcaption>
+            <LiveEditableImage target={{ group: "siteText", field: "featuredCaseAfterImage", type: "image" }} src={featuredAfterImage} alt={`${featuredCase.title} after`} loading="lazy" />
+            <figcaption><EditableText as="span" target={{ group: "siteText", field: `afterLabel${suffix}` }}>{siteText[`afterLabel${suffix}`] || (isArabic ? "بعد" : "After")}</EditableText></figcaption>
           </figure>
         </div>
       </div>
 
       <div className="cases-filter-strip" aria-label={isArabic ? "مميزات عرض الحالات" : "Case gallery highlights"}>
-        <span>{isArabic ? "قبل وبعد جنب بعض" : "Side-by-side comparison"}</span>
-        <span>{isArabic ? "صور كبيرة وواضحة" : "Large clear visuals"}</span>
-        <span>{isArabic ? "مناسب للموبايل" : "Mobile friendly"}</span>
+        <span><EditableText as="span" target={{ group: "siteText", field: `casesFilter1${suffix}` }}>{siteText[`casesFilter1${suffix}`] || (isArabic ? "قبل وبعد جنب بعض" : "Side-by-side comparison")}</EditableText></span>
+        <span><EditableText as="span" target={{ group: "siteText", field: `casesFilter2${suffix}` }}>{siteText[`casesFilter2${suffix}`] || (isArabic ? "صور كبيرة وواضحة" : "Large clear visuals")}</EditableText></span>
+        <span><EditableText as="span" target={{ group: "siteText", field: `casesFilter3${suffix}` }}>{siteText[`casesFilter3${suffix}`] || (isArabic ? "مناسب للموبايل" : "Mobile friendly")}</EditableText></span>
       </div>
 
       <div className="premium-case-grid">
         {cases.map((item) => (
-          <PremiumCaseCard caseItem={item} isArabic={isArabic} onOpen={() => setSelected(item)} key={item.id} />
+          <PremiumCaseCard caseItem={item} isArabic={isArabic} siteText={siteText} onOpen={() => setSelected(item)} key={item.id} />
         ))}
       </div>
       {selected ? (
@@ -2362,30 +2389,49 @@ function CasesPageLuxury({ data, isArabic }: { data: SiteData; isArabic: boolean
   );
 }
 
-function PremiumCaseCard({ caseItem, isArabic, onOpen }: { caseItem: ParsedCase; isArabic: boolean; onOpen: () => void }) {
+function PremiumCaseCard({ caseItem, isArabic, siteText = {}, onOpen }: { caseItem: ParsedCase; isArabic: boolean; siteText?: Record<string, string>; onOpen: () => void }) {
+  const suffix = isArabic ? "Ar" : "En";
+  const beforeImage = siteText[`case${caseItem.id}BeforeImage`] || caseItem.beforeImage;
+  const afterImage = siteText[`case${caseItem.id}AfterImage`] || caseItem.afterImage;
   return (
-    <article className={caseItem.featured ? "premium-case-card featured" : "premium-case-card"}>
-      {caseItem.featured ? <span className="case-featured-ribbon">{isArabic ? "مميزة" : "Featured"}</span> : null}
-      <div className="case-compare-pair">
-        <figure>
-          <img src={caseItem.beforeImage} alt={`${caseItem.title} before`} loading="lazy" />
-          <figcaption>{isArabic ? "قبل" : "Before"}</figcaption>
-        </figure>
-        <figure>
-          <img src={caseItem.afterImage} alt={`${caseItem.title} after`} loading="lazy" />
-          <figcaption>{isArabic ? "بعد" : "After"}</figcaption>
-        </figure>
-      </div>
-      <div className="case-meta">
-        <small>{caseItem.featured ? (isArabic ? "حالة مميزة" : "Featured Case") : caseItem.category}</small>
-        <h3>{isArabic && caseItem.title.startsWith("Case") ? `حالة ${caseItem.id}` : caseItem.title}</h3>
-        <div>
-          <span><ClipboardCheck size={15} /> {isArabic ? "نوع العلاج" : "Treatment"}: {caseItem.category}</span>
-          <span><CalendarCheck size={15} /> {isArabic ? "المدة" : "Duration"}: {caseItem.duration}</span>
+    <LiveEditableDataCard
+      className="case-card-shell"
+      endpoint="/api/admin/gallery"
+      label={isArabic ? "تعديل الحالة" : "Edit case"}
+      payload={{
+        id: caseItem.id,
+        title: caseItem.title,
+        category: caseItem.category,
+        beforeImage,
+        afterImage,
+        duration: caseItem.duration,
+        featured: caseItem.featured,
+        status: "published",
+      }}
+    >
+      <article className={caseItem.featured ? "premium-case-card featured" : "premium-case-card"}>
+        {caseItem.featured ? <span className="case-featured-ribbon"><EditableText as="span" target={{ group: "siteText", field: `caseRibbon${suffix}` }}>{siteText[`caseRibbon${suffix}`] || (isArabic ? "مميزة" : "Featured")}</EditableText></span> : null}
+        <div className="case-compare-pair">
+          <figure>
+            <LiveEditableImage target={{ group: "siteText", field: `case${caseItem.id}BeforeImage`, type: "image" }} src={beforeImage} alt={`${caseItem.title} before`} loading="lazy" />
+            <figcaption><EditableText as="span" target={{ group: "siteText", field: `beforeLabel${suffix}` }}>{siteText[`beforeLabel${suffix}`] || (isArabic ? "قبل" : "Before")}</EditableText></figcaption>
+          </figure>
+          <figure>
+            <LiveEditableImage target={{ group: "siteText", field: `case${caseItem.id}AfterImage`, type: "image" }} src={afterImage} alt={`${caseItem.title} after`} loading="lazy" />
+            <figcaption><EditableText as="span" target={{ group: "siteText", field: `afterLabel${suffix}` }}>{siteText[`afterLabel${suffix}`] || (isArabic ? "بعد" : "After")}</EditableText></figcaption>
+          </figure>
         </div>
-        <button type="button" onClick={onOpen}>{isArabic ? "عرض النتيجة" : "View Result"}</button>
-      </div>
-    </article>
+        <div className="case-meta">
+          <small><EditableText as="span" target={{ group: "siteText", field: `caseSmall${suffix}` }}>{siteText[`caseSmall${suffix}`] || (caseItem.featured ? (isArabic ? "حالة مميزة" : "Featured Case") : caseItem.category)}</EditableText></small>
+          <EditableText as="h3" target={{ group: "siteText", field: `case${caseItem.id}Title${suffix}` }}>{siteText[`case${caseItem.id}Title${suffix}`] || (isArabic && caseItem.title.startsWith("Case") ? `حالة ${caseItem.id}` : caseItem.title)}</EditableText>
+          <div>
+            <span><ClipboardCheck size={15} /> <EditableText as="span" target={{ group: "siteText", field: `caseTreatmentLabel${suffix}` }}>{siteText[`caseTreatmentLabel${suffix}`] || (isArabic ? "نوع العلاج" : "Treatment")}</EditableText>: {caseItem.category}</span>
+            <span><CalendarCheck size={15} /> <EditableText as="span" target={{ group: "siteText", field: `caseDurationLabel${suffix}` }}>{siteText[`caseDurationLabel${suffix}`] || (isArabic ? "المدة" : "Duration")}</EditableText>: {caseItem.duration}</span>
+          </div>
+          <button type="button" onClick={onOpen}><EditableText as="button-label" target={{ group: "siteText", field: `caseViewButton${suffix}` }}>{siteText[`caseViewButton${suffix}`] || (isArabic ? "عرض النتيجة" : "View Result")}</EditableText></button>
+        </div>
+      </article>
+    </LiveEditableDataCard>
   );
 }
 
@@ -2408,57 +2454,116 @@ function BlogPageLuxury({ data, isArabic }: { data: SiteData; isArabic: boolean 
     answerEn: question[2],
   })));
   const thumbImages = data.builderConfig?.blogThumbs?.length ? data.builderConfig.blogThumbs : blogThumbs;
+  const suffix = isArabic ? "Ar" : "En";
+  const siteText = data.siteText || {};
 
   return (
     <section className="section-block page-content">
       <div className="patient-question-grid">
         {questionItems.map((question, index) => (
           <article className="patient-question-card" key={question.questionAr || question.questionEn || index}>
-            <span>Q{index + 1}</span>
-            <h3>{isArabic ? question.questionAr : question.questionEn}</h3>
-            <p>{isArabic ? question.answerAr : (question.answerEn || question.answerAr)}</p>
+            <span><EditableText as="span" target={{ group: "siteText", field: `patientQuestionPrefix${index}` }}>{siteText[`patientQuestionPrefix${index}`] || `Q${index + 1}`}</EditableText></span>
+            <EditableText as="h3" target={{ group: "builderConfig", field: `patientQuestions.${index}.question${suffix}` }}>{isArabic ? question.questionAr : question.questionEn}</EditableText>
+            <EditableText as="p" target={{ group: "builderConfig", field: `patientQuestions.${index}.answer${suffix}` }}>{isArabic ? question.answerAr : (question.answerEn || question.answerAr)}</EditableText>
           </article>
         ))}
       </div>
       <div className="article-grid blog-grid">
-        {articles.map((article, index) => (
-          <article className="article-card blog-lux-card" key={article.id}>
-            <img className="blog-thumb" src={article.cover_image || thumbImages[index % thumbImages.length]} alt="" aria-hidden="true" loading="lazy" />
-            <small>{isArabic ? "تثقيف المرضى" : "Patient Education"}</small>
-            <h3>{article.title}</h3>
-            <p>{isArabic ? (article.excerpt_ar || article.meta_description || article.body) : (article.excerpt_en || article.excerpt_ar || article.meta_description || article.body)}</p>
-            <a href={article.slug ? `/blog/${article.slug}` : "/blog"}>{isArabic ? "اقرأ المزيد" : "Read More"} <ChevronRight size={16} /></a>
-          </article>
-        ))}
+        {articles.map((article, index) => {
+          const coverImage = siteText[`article${article.id}CoverImage`] || article.cover_image || thumbImages[index % thumbImages.length];
+          const readMoreText = siteText[`articleReadMore${suffix}`] || (isArabic ? "اقرأ المزيد" : "Read More");
+          const articleUrl = siteText[`article${article.id}Url`] || (article.slug ? `/blog/${article.slug}` : "/blog");
+          return (
+          <LiveEditableDataCard
+            className="article-card-shell"
+            endpoint="/api/admin/articles"
+            label={isArabic ? "تعديل المقال" : "Edit article"}
+            key={article.id}
+            payload={{
+              id: article.id,
+              title: article.title,
+              slug: article.slug,
+              metaDescription: article.meta_description,
+              excerptAr: article.excerpt_ar,
+              excerptEn: article.excerpt_en,
+              coverImage,
+              body: article.body,
+              conclusion: article.conclusion,
+              category: article.category,
+              author: article.author,
+              featured: Boolean(article.featured),
+              faqItems: parseArticleFaqItems(article.faq_items),
+              status: article.status || "published",
+            }}
+          >
+            <article className="article-card blog-lux-card">
+              <LiveEditableImage target={{ group: "siteText", field: `article${article.id}CoverImage`, type: "image" }} className="blog-thumb" src={coverImage} alt="" decorative loading="lazy" />
+              <small><EditableText as="span" target={{ group: "siteText", field: `articleCardLabel${suffix}` }}>{siteText[`articleCardLabel${suffix}`] || (isArabic ? "تثقيف المرضى" : "Patient Education")}</EditableText></small>
+              <h3>{article.title}</h3>
+              <p>{isArabic ? (article.excerpt_ar || article.meta_description || article.body) : (article.excerpt_en || article.excerpt_ar || article.meta_description || article.body)}</p>
+              <EditableLink
+                href={articleUrl}
+                text={readMoreText}
+                textTarget={{ group: "siteText", field: `articleReadMore${suffix}` }}
+                hrefTarget={{ group: "siteText", field: `article${article.id}Url`, type: "link" }}
+              >
+                {readMoreText} <ChevronRight size={16} />
+              </EditableLink>
+            </article>
+          </LiveEditableDataCard>
+          );
+        })}
       </div>
-      <FaqBlock items={faqs} isArabic={isArabic} />
+      <FaqBlock items={faqs} isArabic={isArabic} siteText={siteText} />
     </section>
   );
 }
 
-function FaqBlock({ items, isArabic }: { items: FaqItem[]; isArabic: boolean }) {
+function FaqBlock({ items, isArabic, siteText = {} }: { items: FaqItem[]; isArabic: boolean; siteText?: Record<string, string> }) {
   if (!items.length) return null;
+  const suffix = isArabic ? "Ar" : "En";
   return (
     <div className="faq-block">
-      <p className="section-label">FAQ</p>
-      <h2>{isArabic ? "أسئلة شائعة" : "Frequently Asked Questions"}</h2>
+      <p className="section-label"><EditableText as="span" target={{ group: "siteText", field: `faqBlockLabel${suffix}` }}>{siteText[`faqBlockLabel${suffix}`] || "FAQ"}</EditableText></p>
+      <EditableText as="h2" target={{ group: "siteText", field: `faqBlockTitle${suffix}` }}>{siteText[`faqBlockTitle${suffix}`] || (isArabic ? "أسئلة شائعة" : "Frequently Asked Questions")}</EditableText>
       <div className="faq-list">
         {items.map((item) => (
-          <details key={item.id}>
-            <summary>{isArabic ? item.question_ar : item.question_en}</summary>
-            <p>{isArabic ? item.answer_ar : item.answer_en}</p>
-          </details>
+          <LiveEditableDataCard
+            className="faq-item-shell"
+            endpoint="/api/admin/faq"
+            label={isArabic ? "تعديل السؤال" : "Edit FAQ"}
+            key={item.id}
+            payload={{
+              id: item.id,
+              questionAr: item.question_ar,
+              questionEn: item.question_en,
+              answerAr: item.answer_ar,
+              answerEn: item.answer_en,
+              page: item.page,
+              sortOrder: item.sort_order,
+              status: item.status || "published",
+            }}
+          >
+            <details>
+              <summary>{isArabic ? item.question_ar : item.question_en}</summary>
+              <p>{isArabic ? item.answer_ar : item.answer_en}</p>
+            </details>
+          </LiveEditableDataCard>
         ))}
       </div>
     </div>
   );
 }
 
-function ArticleDetailPage({ article, isArabic, builder }: { article: Article; isArabic: boolean; builder?: BuilderConfig }) {
+function ArticleDetailPage({ article, isArabic, builder, siteText = {} }: { article: Article; isArabic: boolean; builder?: BuilderConfig; siteText?: Record<string, string> }) {
   const [shareMessage, setShareMessage] = useState("");
   const labels = builder?.articleLabels || {};
   const articleFaqs = parseArticleFaqItems(article.faq_items).filter((item) => item.questionAr || item.questionEn || item.answerAr || item.answerEn);
   const displayExcerpt = isArabic ? (article.excerpt_ar || article.meta_description) : (article.excerpt_en || article.excerpt_ar || article.meta_description);
+  const suffix = isArabic ? "Ar" : "En";
+  const coverImage = siteText[`article${article.id}CoverImage`] || article.cover_image || "";
+  const backText = siteText[`articleBackText${suffix}`] || (isArabic ? "العودة للمقالات" : "Back to Blog");
+  const ctaText = siteText[`articleBookText${suffix}`] || (isArabic ? "احجز استشارة الآن" : "Book a Consultation");
 
   async function shareArticle() {
     const url = typeof window !== "undefined" ? window.location.href : `/blog/${article.slug}`;
@@ -2478,11 +2583,32 @@ function ArticleDetailPage({ article, isArabic, builder }: { article: Article; i
   }
 
   return (
+    <LiveEditableDataCard
+      className="article-detail-shell"
+      endpoint="/api/admin/articles"
+      label={isArabic ? "تعديل المقال بالكامل" : "Edit full article"}
+      payload={{
+        id: article.id,
+        title: article.title,
+        slug: article.slug,
+        metaDescription: article.meta_description,
+        excerptAr: article.excerpt_ar,
+        excerptEn: article.excerpt_en,
+        coverImage,
+        body: article.body,
+        conclusion: article.conclusion,
+        category: article.category,
+        author: article.author,
+        featured: Boolean(article.featured),
+        faqItems: parseArticleFaqItems(article.faq_items),
+        status: article.status || "published",
+      }}
+    >
     <article className="article-detail page-content">
-      <a className="article-back-link" href="/blog">{isArabic ? "العودة للمقالات" : "Back to Blog"}</a>
-      {article.cover_image ? <img className="article-detail-cover" src={article.cover_image} alt={article.title} loading="eager" /> : null}
+      <EditableLink className="article-back-link" href={siteText.articleBackUrl || "/blog"} text={backText} textTarget={{ group: "siteText", field: `articleBackText${suffix}` }} hrefTarget={{ group: "siteText", field: "articleBackUrl", type: "link" }} />
+      {coverImage ? <LiveEditableImage target={{ group: "siteText", field: `article${article.id}CoverImage`, type: "image" }} className="article-detail-cover" src={coverImage} alt={article.title} loading="eager" /> : null}
       <div className="article-detail-body">
-        <p className="section-label">{isArabic ? (labels.detailLabelAr || "مقال تثقيفي") : (labels.detailLabelEn || "Patient Education")}</p>
+        <p className="section-label"><EditableText as="span" target={{ group: "builderConfig", field: `articleLabels.detailLabel${suffix}` }}>{isArabic ? (labels.detailLabelAr || "مقال تثقيفي") : (labels.detailLabelEn || "Patient Education")}</EditableText></p>
         <h1>{article.title}</h1>
         <div className="article-meta-row">
           <span>{article.category || (isArabic ? "نصائح العيادة" : "Clinic Tips")}</span>
@@ -2495,7 +2621,7 @@ function ArticleDetailPage({ article, isArabic, builder }: { article: Article; i
         </div>
         {articleFaqs.length ? (
           <div className="article-faq-inline">
-            <p className="section-label">FAQ</p>
+            <p className="section-label"><EditableText as="span" target={{ group: "siteText", field: `articleFaqLabel${suffix}` }}>{siteText[`articleFaqLabel${suffix}`] || "FAQ"}</EditableText></p>
             {articleFaqs.map((faq, index) => (
               <details key={`${faq.questionAr || faq.questionEn}-${index}`}>
                 <summary>{isArabic ? (faq.questionAr || faq.questionEn) : (faq.questionEn || faq.questionAr)}</summary>
@@ -2506,19 +2632,18 @@ function ArticleDetailPage({ article, isArabic, builder }: { article: Article; i
         ) : null}
         {article.conclusion ? (
           <footer className="article-footer-note">
-            <span>{isArabic ? (labels.footerLabelAr || "فوتر المقال") : (labels.footerLabelEn || "Article Footer")}</span>
+            <EditableText as="span" target={{ group: "builderConfig", field: `articleLabels.footerLabel${suffix}` }}>{isArabic ? (labels.footerLabelAr || "فوتر المقال") : (labels.footerLabelEn || "Article Footer")}</EditableText>
             <strong>{article.conclusion}</strong>
           </footer>
         ) : null}
-        <a className="primary-button article-book-button" href={whatsappLink(isArabic ? "مرحباً، قرأت مقال على الموقع وعايز أحجز استشارة." : "Hello, I read an article on the website and would like to book a consultation.", defaultSiteSettings.whatsappPhone)} target="_blank" rel="noreferrer">
-          {isArabic ? "احجز استشارة الآن" : "Book a Consultation"}
-        </a>
+        <EditableLink className="primary-button article-book-button" href={whatsappLink(isArabic ? "مرحباً، قرأت مقال على الموقع وعايز أحجز استشارة." : "Hello, I read an article on the website and would like to book a consultation.", defaultSiteSettings.whatsappPhone)} target="_blank" rel="noreferrer" text={ctaText} textTarget={{ group: "siteText", field: `articleBookText${suffix}` }} />
         <button className="secondary-button article-share-button" type="button" onClick={() => void shareArticle()}>
-          {isArabic ? (labels.shareAr || "مشاركة المقال") : (labels.shareEn || "Share Article")} <ChevronRight size={16} />
+          <EditableText as="button-label" target={{ group: "builderConfig", field: `articleLabels.share${suffix}` }}>{isArabic ? (labels.shareAr || "مشاركة المقال") : (labels.shareEn || "Share Article")}</EditableText> <ChevronRight size={16} />
         </button>
         {shareMessage ? <p className="success-message">{shareMessage}</p> : null}
       </div>
     </article>
+    </LiveEditableDataCard>
   );
 }
 
@@ -2546,6 +2671,7 @@ function ContactPageLuxury({
   settings,
   bookingSent,
   formConfig,
+  siteText = {},
 }: {
   booking: { name: string; phone: string; service: string; message: string };
   setBooking: (booking: { name: string; phone: string; service: string; message: string }) => void;
@@ -2555,20 +2681,25 @@ function ContactPageLuxury({
   settings: SiteSettings;
   bookingSent: boolean;
   formConfig?: FormConfig;
+  siteText?: Record<string, string>;
 }) {
   const form = { requireName: true, requirePhone: false, showAge: false, showImage: false, showDate: true, showMessage: true, ...formConfig };
+  const suffix = isArabic ? "Ar" : "En";
+  const contactTitle = siteText[`contactCardTitle${suffix}`] || t.pages.contact[1];
+  const contactText = siteText[`contactCardText${suffix}`] || t.pages.contact[2];
+  const sendText = siteText[`contactSendButton${suffix}`] || t.sendWhatsApp;
   return (
     <section className="contact-section page-content">
       <div className="contact-card contact-lux-card">
-        <h2>{t.pages.contact[1]}</h2>
-        <p className="section-text">{t.pages.contact[2]}</p>
-        <a className="map-panel" href={mapUrl} target="_blank" rel="noreferrer" aria-label="Open clinic location">
-          <img src="/inner/map-gold-pin.png" alt="Clinic location map" />
-        </a>
+        <EditableText as="h2" target={{ group: "siteText", field: `contactCardTitle${suffix}` }}>{contactTitle}</EditableText>
+        <EditableText as="p" className="section-text" target={{ group: "siteText", field: `contactCardText${suffix}` }}>{contactText}</EditableText>
+        <EditableLink className="map-panel" href={settings.mapUrl} target="_blank" rel="noreferrer" ariaLabel="Open clinic location" text={isArabic ? "خريطة العيادة" : "Clinic map"} hrefTarget={{ group: "siteSettings", field: "mapUrl", type: "link" }}>
+          <LiveEditableImage target={{ group: "siteText", field: "contactMapImage", type: "image" }} src={siteText.contactMapImage || "/inner/map-gold-pin.png"} alt="Clinic location map" />
+        </EditableLink>
         <div className="contact-links">
-          <a href={`tel:${settings.phonePrimary}`}><Phone size={18} /> <span className="phone-number">{settings.phonePrimary}</span></a>
-          <a href={`tel:${settings.phoneSecondary}`}><Phone size={18} /> <span className="phone-number">{settings.phoneSecondary}</span></a>
-          <a href={settings.mapUrl} target="_blank" rel="noreferrer"><MapPin size={18} /> {t.address}</a>
+          <EditableLink href={`tel:${settings.phonePrimary}`} text={settings.phonePrimary} textTarget={{ group: "siteSettings", field: "phonePrimary" }}><Phone size={18} /> <span className="phone-number">{settings.phonePrimary}</span></EditableLink>
+          <EditableLink href={`tel:${settings.phoneSecondary}`} text={settings.phoneSecondary} textTarget={{ group: "siteSettings", field: "phoneSecondary" }}><Phone size={18} /> <span className="phone-number">{settings.phoneSecondary}</span></EditableLink>
+          <EditableLink href={settings.mapUrl} target="_blank" rel="noreferrer" text={siteText[`contactAddressText${suffix}`] || t.address} textTarget={{ group: "siteText", field: `contactAddressText${suffix}` }} hrefTarget={{ group: "siteSettings", field: "mapUrl", type: "link" }}><MapPin size={18} /> {siteText[`contactAddressText${suffix}`] || t.address}</EditableLink>
         </div>
       </div>
       <form className="booking-form booking-lux-form" onSubmit={submitBooking}>
@@ -2582,7 +2713,7 @@ function ContactPageLuxury({
         {form.showDate ? <input type="date" onChange={(event) => setBooking({ ...booking, message: `${booking.message}\n${isArabic ? "تاريخ مفضل" : "Preferred date"}: ${event.target.value}` })} /> : null}
         {form.showImage ? <input type="file" accept="image/*" onChange={(event) => setBooking({ ...booking, message: `${booking.message}\n${isArabic ? "يوجد صورة مرفقة باسم" : "Image selected"}: ${event.target.files?.[0]?.name || "-"}` })} /> : null}
         {form.showMessage ? <textarea value={booking.message} onChange={(event) => setBooking({ ...booking, message: event.target.value })} placeholder={t.formMessage} /> : null}
-        <button className="primary-button" type="submit"><WhatsAppIcon size={18} /> {t.sendWhatsApp}</button>
+        <button className="primary-button" type="submit"><WhatsAppIcon size={18} /> <EditableText as="button-label" target={{ group: "siteText", field: `contactSendButton${suffix}` }}>{sendText}</EditableText></button>
         {bookingSent ? <p className="success-message">{isArabic ? "تم فتح واتساب برسالة الحجز. ابعتها للعيادة لتأكيد التواصل." : "WhatsApp opened with your booking message. Send it to confirm contact."}</p> : null}
       </form>
     </section>
@@ -2655,54 +2786,102 @@ function getServiceBySlug(slug: ServiceSlug) {
 function ServiceDetailIntro({ slug, isArabic, data }: { slug: ServiceSlug; isArabic: boolean; data: SiteData }) {
   const { index, service } = getServiceBySlug(slug);
   const dynamicService = serviceListFromData(data).find((item) => item.slug === slug);
+  const siteText = data.siteText || {};
+  const suffix = isArabic ? "Ar" : "En";
+  const icon = siteText[`service_${slug}_icon`] || dynamicService?.icon || serviceIcons[index];
   const title = dynamicService ? (isArabic ? dynamicService.titleAr : dynamicService.titleEn) : (isArabic ? service[1] : service[0]);
   const description = dynamicService ? (isArabic ? dynamicService.descriptionAr : dynamicService.descriptionEn) : (isArabic ? service[2] : service[3]);
   return (
+    <LiveEditableDataCard
+      className="service-detail-intro-shell"
+      endpoint="/api/admin/services"
+      label={isArabic ? "تعديل الخدمة" : "Edit service"}
+      payload={{
+        id: dynamicService?.id || index + 1,
+        slug,
+        titleAr: dynamicService?.titleAr || service[1],
+        titleEn: dynamicService?.titleEn || service[0],
+        descriptionAr: dynamicService?.descriptionAr || service[2],
+        descriptionEn: dynamicService?.descriptionEn || service[3],
+        whatsappMessageAr: dynamicService?.whatsappMessageAr || "",
+        whatsappMessageEn: dynamicService?.whatsappMessageEn || "",
+        icon,
+        featured: dynamicService?.featured ?? true,
+        status: "published",
+      }}
+    >
     <section className="page-hero service-detail-hero">
-      <img className="service-detail-icon" src={dynamicService?.icon || serviceIcons[index]} alt="" aria-hidden="true" loading="lazy" />
-      <p className="section-label">{isArabic ? "خدمة متخصصة" : "Specialized Service"}</p>
+      <LiveEditableImage target={{ group: "siteText", field: `service_${slug}_icon`, type: "image" }} className="service-detail-icon" src={icon} alt="" decorative loading="lazy" />
+      <p className="section-label"><EditableText as="span" target={{ group: "siteText", field: `serviceDetailLabel${suffix}` }}>{siteText[`serviceDetailLabel${suffix}`] || (isArabic ? "خدمة متخصصة" : "Specialized Service")}</EditableText></p>
       <h1>{title}</h1>
       <p>{description}</p>
     </section>
+    </LiveEditableDataCard>
   );
 }
 
 function ServiceDetailPage({ slug, isArabic, settings, data }: { slug: ServiceSlug; isArabic: boolean; settings: SiteSettings; data: SiteData }) {
   const { index, service } = getServiceBySlug(slug);
   const dynamicService = serviceListFromData(data).find((item) => item.slug === slug);
+  const siteText = data.siteText || {};
+  const suffix = isArabic ? "Ar" : "En";
+  const icon = siteText[`service_${slug}_icon`] || dynamicService?.icon || serviceIcons[index];
   const title = dynamicService ? (isArabic ? dynamicService.titleAr : dynamicService.titleEn) : (isArabic ? service[1] : service[0]);
   const ctaLabel = dynamicService ? (isArabic ? dynamicService.titleAr : dynamicService.titleEn) : (isArabic ? service[1] : service[0]);
-  const steps = isArabic
+  const steps = (isArabic
     ? ["تقييم الحالة بدقة", "شرح خطة العلاج", "تنفيذ مريح وآمن", "متابعة النتيجة"]
-    : ["Precise case assessment", "Clear treatment planning", "Comfortable safe procedure", "Result follow-up"];
+    : ["Precise case assessment", "Clear treatment planning", "Comfortable safe procedure", "Result follow-up"]).map((step, stepIndex) => siteText[`serviceDetailStep${stepIndex + 1}${suffix}`] || step);
   const ctaMessage = dynamicService
     ? (isArabic ? dynamicService.whatsappMessageAr : dynamicService.whatsappMessageEn) || serviceWhatsAppMessage(slug, isArabic)
     : serviceWhatsAppMessage(slug, isArabic);
+  const mainTitle = siteText[`serviceDetailMainTitle${suffix}`] || (isArabic ? "رحلة علاج واضحة من أول زيارة" : "A Clear Treatment Journey From the First Visit");
+  const mainText = siteText[`serviceDetailMainText${suffix}`] || (isArabic ? "كل خدمة مصممة عشان تكون مريحة، مفهومة، ومناسبة لحالتك. بنشرح البدائل والتوقعات قبل أي خطوة." : "Every service is designed to be comfortable, clear, and tailored to your case. We explain options and expectations before every step.");
+  const sideText = siteText[`serviceDetailSideText${suffix}`] || (isArabic ? "احجز استشارة بسيطة عبر واتساب وابدأ بخطة واضحة." : "Book a simple WhatsApp consultation and start with a clear plan.");
+  const ctaPrefix = siteText[`serviceDetailCtaPrefix${suffix}`] || (isArabic ? "احجز الخدمة" : "Book This Service");
 
   return (
+    <LiveEditableDataCard
+      className="service-detail-data-shell"
+      endpoint="/api/admin/services"
+      label={isArabic ? "تعديل الخدمة" : "Edit service"}
+      payload={{
+        id: dynamicService?.id || index + 1,
+        slug,
+        titleAr: dynamicService?.titleAr || service[1],
+        titleEn: dynamicService?.titleEn || service[0],
+        descriptionAr: dynamicService?.descriptionAr || service[2],
+        descriptionEn: dynamicService?.descriptionEn || service[3],
+        whatsappMessageAr: dynamicService?.whatsappMessageAr || "",
+        whatsappMessageEn: dynamicService?.whatsappMessageEn || "",
+        icon,
+        featured: dynamicService?.featured ?? true,
+        status: "published",
+      }}
+    >
     <section className="service-detail-layout page-content">
       <div className="service-detail-main">
-        <h2>{isArabic ? "رحلة علاج واضحة من أول زيارة" : "A Clear Treatment Journey From the First Visit"}</h2>
-        <p>{isArabic ? "كل خدمة مصممة عشان تكون مريحة، مفهومة، ومناسبة لحالتك. بنشرح البدائل والتوقعات قبل أي خطوة." : "Every service is designed to be comfortable, clear, and tailored to your case. We explain options and expectations before every step."}</p>
+        <EditableText as="h2" target={{ group: "siteText", field: `serviceDetailMainTitle${suffix}` }}>{mainTitle}</EditableText>
+        <EditableText as="p" target={{ group: "siteText", field: `serviceDetailMainText${suffix}` }}>{mainText}</EditableText>
         <div className="treatment-steps">
           {steps.map((step, stepIndex) => (
             <article key={step}>
               <span>{String(stepIndex + 1).padStart(2, "0")}</span>
-              <strong>{step}</strong>
+              <EditableText as="strong" target={{ group: "siteText", field: `serviceDetailStep${stepIndex + 1}${suffix}` }}>{step}</EditableText>
             </article>
           ))}
         </div>
       </div>
       <aside className="service-detail-side">
-        <img src={dynamicService?.icon || serviceIcons[index]} alt="" aria-hidden="true" loading="lazy" />
+        <LiveEditableImage target={{ group: "siteText", field: `service_${slug}_icon`, type: "image" }} src={icon} alt="" decorative loading="lazy" />
         <h3>{title}</h3>
-        <p>{isArabic ? "احجز استشارة بسيطة عبر واتساب وابدأ بخطة واضحة." : "Book a simple WhatsApp consultation and start with a clear plan."}</p>
+        <EditableText as="p" target={{ group: "siteText", field: `serviceDetailSideText${suffix}` }}>{sideText}</EditableText>
         <a className="primary-button service-whatsapp-cta" href={whatsappLink(ctaMessage, settings.whatsappPhone)} target="_blank" rel="noreferrer">
           <WhatsAppIcon size={18} />
-          {isArabic ? `احجز الخدمة - ${ctaLabel}` : `Book This Service - ${ctaLabel}`}
+          <EditableText as="button-label" target={{ group: "siteText", field: `serviceDetailCtaPrefix${suffix}` }}>{ctaPrefix}</EditableText> - {ctaLabel}
         </a>
       </aside>
     </section>
+    </LiveEditableDataCard>
   );
 }
 

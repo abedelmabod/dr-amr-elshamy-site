@@ -1,4 +1,4 @@
-import { getDb, isAdmin, logActivity, pageParams } from "../../_lib";
+import { getDb, isAdmin, logActivity, normalizeReview, pageParams } from "../../_lib";
 
 type ReviewStatus = "pending" | "approved" | "rejected";
 
@@ -74,6 +74,32 @@ export async function PATCH(request: Request) {
       .bind(status, new Date().toISOString(), id)
       .run();
     await logActivity(db, "moderated", "review", id, { status });
+
+    return Response.json({ ok: true });
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "Unexpected error" }, { status: 500 });
+  }
+}
+
+export async function PUT(request: Request) {
+  if (!(await isAdmin(request))) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const payload = (await request.json()) as { id?: number };
+    const id = Number(payload.id);
+    const review = normalizeReview(payload);
+    if (!id || !review.name || !review.message) {
+      return Response.json({ error: "Review id, name, and message are required." }, { status: 400 });
+    }
+
+    const db = await getDb();
+    await db
+      .prepare("UPDATE reviews SET name = ?, rating = ?, message = ?, status = ?, updated_at = ? WHERE id = ?")
+      .bind(review.name, review.rating, review.message, review.status === "published" ? "approved" : review.status, new Date().toISOString(), id)
+      .run();
+    await logActivity(db, "updated", "review", id, { status: review.status });
 
     return Response.json({ ok: true });
   } catch (error) {

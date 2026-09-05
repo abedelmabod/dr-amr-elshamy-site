@@ -812,8 +812,25 @@
   border-radius: 18px;
 }
 
-.service-card-shell > .service-card {
+.service-card-shell > .service-card,
+.case-card-shell > .premium-case-card,
+.review-card-shell > .review-card,
+.article-card-shell > .article-card,
+.faq-item-shell > details {
   height: 100%;
+}
+
+.article-detail-shell,
+.service-detail-intro-shell,
+.service-detail-data-shell {
+  display: block;
+}
+
+.review-card-shell,
+.article-card-shell,
+.case-card-shell,
+.faq-item-shell {
+  min-width: 0;
 }
 
 .live-edit-card-badge {
