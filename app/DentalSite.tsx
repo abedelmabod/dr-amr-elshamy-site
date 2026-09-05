@@ -2409,8 +2409,33 @@ function AboutPageLuxury({ data, isArabic }: { data: SiteData; isArabic: boolean
   const tourImages = enabledItems(data.builderConfig?.clinicTour, clinicTour.map((image) => ({ image, enabled: true })));
   const suffix = isArabic ? "Ar" : "En";
   const aboutStoryLabelKey = `aboutStoryLabel${suffix}`;
+  const teamLabelKey = `aboutTeamLabel${suffix}`;
+  const teamTitleKey = `aboutTeamTitle${suffix}`;
+  const teamTextKey = `aboutTeamText${suffix}`;
   const clinicTourLabelKey = `clinicTourLabel${suffix}`;
   const clinicTourTitleKey = `clinicTourTitle${suffix}`;
+  const assistantDoctors = [
+    {
+      key: "doctor2",
+      image: "/icons/comfort-face.png",
+      nameAr: "د. سلمى أحمد",
+      nameEn: "Dr. Salma Ahmed",
+      roleAr: "طبيبة أسنان تجميلية",
+      roleEn: "Cosmetic Dentist",
+      bioAr: "بيانات مؤقتة لحين إرسال معلومات الطبيبة الحقيقية من العميل.",
+      bioEn: "Temporary profile until the client sends the doctor's real details.",
+    },
+    {
+      key: "doctor3",
+      image: "/brand/dr-amr-cutout.png",
+      nameAr: "د. كريم محمود",
+      nameEn: "Dr. Karim Mahmoud",
+      roleAr: "طبيب علاج جذور وحشو",
+      roleEn: "Root Canal & Restorative Dentist",
+      bioAr: "بيانات مؤقتة قابلة للتعديل بالكامل من وضع التعديل.",
+      bioEn: "Temporary editable details for the live editing mode.",
+    },
+  ];
   return (
     <>
       <section className="about-editorial page-content">
@@ -2440,13 +2465,38 @@ function AboutPageLuxury({ data, isArabic }: { data: SiteData; isArabic: boolean
           </div>
         </div>
       </section>
+      <section className="about-team-section">
+        <p className="section-label"><EditableText as="span" target={{ group: "siteText", field: teamLabelKey }}>{siteText[teamLabelKey] || (isArabic ? "فريق العيادة" : "Clinic Team")}</EditableText></p>
+        <EditableText as="h2" target={{ group: "siteText", field: teamTitleKey }}>{siteText[teamTitleKey] || (isArabic ? "أطباء إضافيون داخل الفريق" : "Additional Doctors on the Team")}</EditableText>
+        <EditableText as="p" className="section-text" target={{ group: "siteText", field: teamTextKey }}>
+          {siteText[teamTextKey] || (isArabic ? "بيانات مؤقتة لحين إرسال الصور والمعلومات النهائية من العميل." : "Temporary details until the client sends the final photos and information.")}
+        </EditableText>
+        <div className="about-team-grid">
+          {assistantDoctors.map((doctor) => {
+            const image = siteText[`${doctor.key}Image`] || doctor.image;
+            const name = siteText[`${doctor.key}Name${suffix}`] || (isArabic ? doctor.nameAr : doctor.nameEn);
+            const role = siteText[`${doctor.key}Role${suffix}`] || (isArabic ? doctor.roleAr : doctor.roleEn);
+            const bio = siteText[`${doctor.key}Bio${suffix}`] || (isArabic ? doctor.bioAr : doctor.bioEn);
+            return (
+              <article className="about-team-card" key={doctor.key}>
+                <LiveEditableImage target={{ group: "siteText", field: `${doctor.key}Image`, type: "image" }} src={image} alt={name} loading="lazy" />
+                <div>
+                  <EditableText as="h3" target={{ group: "siteText", field: `${doctor.key}Name${suffix}` }}>{name}</EditableText>
+                  <EditableText as="strong" target={{ group: "siteText", field: `${doctor.key}Role${suffix}` }}>{role}</EditableText>
+                  <EditableText as="p" target={{ group: "siteText", field: `${doctor.key}Bio${suffix}` }}>{bio}</EditableText>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </section>
       <section className="tour-section">
         <p className="section-label"><EditableText as="span" target={{ group: "siteText", field: clinicTourLabelKey }}>{siteText[clinicTourLabelKey] || (isArabic ? "جولة داخل العيادة" : "Clinic Virtual Tour")}</EditableText></p>
         <EditableText as="h2" target={{ group: "siteText", field: clinicTourTitleKey }}>{siteText[clinicTourTitleKey] || (isArabic ? "مساحة علاج هادئة، نظيفة، وفاخرة" : "A Calm, Sterile, Premium Treatment Space")}</EditableText>
         <div className="tour-grid">
           {tourImages.map((item, index) => (
             <button className="tour-card" type="button" key={item.image || index}>
-              <LiveEditableImage target={{ group: "builderConfig", field: `clinicTour.${index}.image`, type: "image" }} src={item.image || clinicTour[index % clinicTour.length]} alt={(isArabic ? item.altAr : item.altEn) || `Clinic tour ${index + 1}`} loading="lazy" />
+              <LiveEditableImage target={{ group: "siteText", field: `clinicTourImage${index + 1}`, type: "image" }} src={siteText[`clinicTourImage${index + 1}`] || item.image || clinicTour[index % clinicTour.length]} alt={(isArabic ? item.altAr : item.altEn) || `Clinic tour ${index + 1}`} loading="lazy" />
               <span>+</span>
             </button>
           ))}
