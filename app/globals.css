@@ -3544,26 +3544,10 @@ textarea:focus {
   height: 100%;
 }
 
-.tour-card > span:not(.live-edit-image) {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  color: #f7df8d;
-  background: rgba(17, 24, 39, 0.58);
-  font-size: 46px;
-  opacity: 0;
-  transition: opacity 240ms var(--ease);
-}
-
 .tour-card:hover > img,
 .tour-card:hover > .live-edit-image > img {
   transform: scale(1.06);
   filter: saturate(1.06) contrast(1.04);
-}
-
-.tour-card:hover > span:not(.live-edit-image) {
-  opacity: 1;
 }
 
 .comparison-card {
@@ -9203,7 +9187,6 @@ body:has(.admin-live-focus) .route-stage {
 }
 
 .live-edit-enabled :is(.service-card::before, .review-card::before, .article-card::before),
-.live-edit-enabled .tour-card > span:not(.live-edit-image),
 .live-edit-enabled .review-shot::after {
   opacity: 0 !important;
   pointer-events: none !important;

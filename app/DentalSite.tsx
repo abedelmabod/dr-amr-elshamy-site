@@ -2513,7 +2513,6 @@ function AboutPageLuxury({ data, isArabic }: { data: SiteData; isArabic: boolean
           {tourImages.map((item, index) => (
             <button className="tour-card" type="button" key={item.image || index}>
               <LiveEditableImage target={{ group: "siteText", field: `clinicTourImage${index + 1}`, type: "image" }} src={siteText[`clinicTourImage${index + 1}`] || item.image || clinicTour[index % clinicTour.length]} alt={(isArabic ? item.altAr : item.altEn) || `Clinic tour ${index + 1}`} loading="lazy" />
-              <span>+</span>
             </button>
           ))}
         </div>
