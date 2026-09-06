@@ -28,7 +28,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { createContext, type CSSProperties, FormEvent, type ReactNode, type SyntheticEvent, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, type CSSProperties, FormEvent, type ReactNode, type SyntheticEvent, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 type Lang = "ar" | "en";
 type Page = "home" | "about" | "services" | "service-detail" | "cases" | "reviews" | "blog" | "contact" | "admin" | "not-found";
@@ -624,6 +624,7 @@ export function DentalSite({ page = "home", serviceSlug, article }: { page?: Pag
   const [settings, setSettings] = useState<SiteSettings>(defaultSiteSettings);
   const [adminSession, setAdminSession] = useState<AdminSessionInfo | null>(null);
   const [editMode, setEditMode] = useState(false);
+  const [cmsPreview, setCmsPreview] = useState(false);
 
   const t = copy[lang];
   const isArabic = lang === "ar";
@@ -704,11 +705,26 @@ export function DentalSite({ page = "home", serviceSlug, article }: { page?: Pag
 
   useEffect(() => {
     setEditMode(localStorage.getItem("cms-edit-mode") === "on");
+    setCmsPreview(new URLSearchParams(window.location.search).has("cmsPreview"));
   }, []);
 
   useEffect(() => {
     localStorage.setItem("cms-edit-mode", editMode ? "on" : "off");
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: "cms-edit-mode", enabled: editMode }, window.location.origin);
+    }
   }, [editMode]);
+
+  useEffect(() => {
+    function handleCmsEditMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin) return;
+      const payload = event.data as { type?: string; enabled?: boolean };
+      if (payload?.type === "cms-set-edit-mode") setEditMode(Boolean(payload.enabled));
+    }
+
+    window.addEventListener("message", handleCmsEditMessage);
+    return () => window.removeEventListener("message", handleCmsEditMessage);
+  }, []);
 
   useEffect(() => {
     const label = page === "service-detail" && serviceSlug ? `service/${serviceSlug}` : page === "blog" && article?.slug ? `blog/${article.slug}` : page;
@@ -843,7 +859,7 @@ export function DentalSite({ page = "home", serviceSlug, article }: { page?: Pag
     uploadImage: uploadLiveImage,
     updateSection: updateLiveSection,
   }), [adminSession?.isSuperAdmin, page, editMode, data.layoutConfig, isArabic]);
-  const showEditModeBar = Boolean(adminSession?.isSuperAdmin && page !== "admin");
+  const showEditModeBar = Boolean(adminSession?.isSuperAdmin && page !== "admin" && !cmsPreview);
 
   return (
     <LiveEditContext.Provider value={liveEdit}>
@@ -3209,6 +3225,7 @@ function AdminPage({ lang, t }: { lang: Lang; t: (typeof copy)[Lang] }) {
   const [session, setSession] = useState<AdminSessionInfo | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [liveViewFocused, setLiveViewFocused] = useState(false);
+  const [previewEditMode, setPreviewEditMode] = useState(false);
   const [previewTick, setPreviewTick] = useState(() => Date.now());
   const [stats, setStats] = useState({ totalVisitors: 0, publishedArticles: 0, activeServices: 0, pendingReviews: 0, draftArticles: 0, newBookings: 0, alerts: [] as string[] });
   const [adminError, setAdminError] = useState("");
@@ -3264,17 +3281,17 @@ function AdminPage({ lang, t }: { lang: Lang; t: (typeof copy)[Lang] }) {
 
   useEffect(() => {
     setPreviewTick(Date.now());
-    setLiveViewFocused(localStorage.getItem("cms-edit-mode") === "on");
+    setPreviewEditMode(localStorage.getItem("cms-edit-mode") === "on");
   }, [previewPath]);
 
   useEffect(() => {
     function handleEditModeMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin) return;
       const payload = event.data as { type?: string; enabled?: boolean };
-      if (payload?.type === "cms-edit-mode") setLiveViewFocused(Boolean(payload.enabled));
+      if (payload?.type === "cms-edit-mode") setPreviewEditMode(Boolean(payload.enabled));
     }
     function handleEditModeStorage(event: StorageEvent) {
-      if (event.key === "cms-edit-mode") setLiveViewFocused(event.newValue === "on");
+      if (event.key === "cms-edit-mode") setPreviewEditMode(event.newValue === "on");
     }
 
     window.addEventListener("message", handleEditModeMessage);
@@ -3337,15 +3354,27 @@ function AdminPage({ lang, t }: { lang: Lang; t: (typeof copy)[Lang] }) {
               {isArabic ? "عرض الموقع العام" : "View Public Site"}
             </a>
             {previewPath ? (
-              <button className="secondary-button" type="button" onClick={() => setLiveViewFocused(true)}>
-                {isArabic ? "معاينة كاملة" : "Full Live View"}
+              <button className="secondary-button" type="button" onClick={() => { setPreviewEditMode(true); localStorage.setItem("cms-edit-mode", "on"); setLiveViewFocused(true); }}>
+                {isArabic ? "تعديل مباشر" : "Live Edit"}
               </button>
             ) : null}
             <button className="secondary-button" type="button" onClick={() => { setPreviewTick(Date.now()); void loadDashboard(); }}>{isArabic ? "تحديث" : "Refresh"}</button>
           </div>
         </header>
 
-        <AdminLiveWorkspace previewPath={previewPath} previewTick={previewTick} isArabic={isArabic} isFocused={liveViewFocused} onExitFocus={() => setLiveViewFocused(false)}>
+        <AdminLiveWorkspace
+          previewPath={previewPath}
+          previewTick={previewTick}
+          isArabic={isArabic}
+          isFocused={liveViewFocused}
+          editMode={previewEditMode}
+          onExitFocus={() => setLiveViewFocused(false)}
+          onRefresh={() => { setPreviewTick(Date.now()); void loadDashboard(); }}
+          onToggleEditMode={(enabled) => {
+            setPreviewEditMode(enabled);
+            localStorage.setItem("cms-edit-mode", enabled ? "on" : "off");
+          }}
+        >
           {activeView === "home" ? <AdminOverview stats={stats} isArabic={isArabic} /> : null}
           {activeView === "control" ? <ControlCenterManager isArabic={isArabic} /> : null}
           {activeView === "homeContent" ? <HomeContentManager isArabic={isArabic} /> : null}
@@ -3387,19 +3416,50 @@ function adminPreviewPath(view: AdminView) {
   return paths[view] || "";
 }
 
-function AdminLiveWorkspace({ children, previewPath, previewTick, isArabic, isFocused, onExitFocus }: { children: ReactNode; previewPath: string; previewTick: number; isArabic: boolean; isFocused: boolean; onExitFocus: () => void }) {
+function AdminLiveWorkspace({
+  children,
+  previewPath,
+  previewTick,
+  isArabic,
+  isFocused,
+  editMode,
+  onExitFocus,
+  onRefresh,
+  onToggleEditMode,
+}: {
+  children: ReactNode;
+  previewPath: string;
+  previewTick: number;
+  isArabic: boolean;
+  isFocused: boolean;
+  editMode: boolean;
+  onExitFocus: () => void;
+  onRefresh: () => void;
+  onToggleEditMode: (enabled: boolean) => void;
+}) {
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
   if (!previewPath) return <>{children}</>;
   const separator = previewPath.includes("?") ? "&" : "?";
   const src = `${previewPath}${separator}cmsPreview=dr-amr-elshamy&previewVersion=${previewTick}`;
+
+  function setIframeEditMode(enabled: boolean) {
+    onToggleEditMode(enabled);
+    iframeRef.current?.contentWindow?.postMessage({ type: "cms-set-edit-mode", enabled }, window.location.origin);
+  }
 
   return (
     <div className="admin-live-workspace">
       <div className="admin-editor-zone">{children}</div>
       <aside className="admin-live-preview-card" aria-label={isArabic ? "معاينة مباشرة للموقع" : "Live website preview"}>
         {isFocused ? (
-          <button className="admin-live-exit-button" type="button" onClick={onExitFocus}>
-            {isArabic ? "رجوع للوحة" : "Back to Dashboard"}
-          </button>
+          <div className="admin-live-command-bar" aria-label={isArabic ? "أدوات التعديل المباشر" : "Live edit controls"}>
+            <button type="button" onClick={onExitFocus}>{isArabic ? "رجوع للوحة" : "Dashboard"}</button>
+            <button className={editMode ? "is-on" : ""} type="button" onClick={() => setIframeEditMode(!editMode)}>
+              {isArabic ? `وضع التعديل: ${editMode ? "تشغيل" : "إيقاف"}` : `Edit Mode: ${editMode ? "ON" : "OFF"}`}
+            </button>
+            <button type="button" onClick={onRefresh}>{isArabic ? "تحديث" : "Refresh"}</button>
+            <a href={previewPath} target="_blank" rel="noreferrer">{isArabic ? "فتح الموقع" : "Open Site"}</a>
+          </div>
         ) : null}
         <div className="admin-live-preview-head">
           <div>
@@ -3408,7 +3468,7 @@ function AdminLiveWorkspace({ children, previewPath, previewTick, isArabic, isFo
           </div>
           <a href={previewPath} target="_blank" rel="noreferrer">{isArabic ? "فتح" : "Open"}</a>
         </div>
-        <iframe src={src} title={isArabic ? "معاينة الموقع" : "Website preview"} loading="lazy" />
+        <iframe ref={iframeRef} src={src} title={isArabic ? "معاينة الموقع" : "Website preview"} loading="lazy" onLoad={() => setIframeEditMode(editMode)} />
       </aside>
     </div>
   );
