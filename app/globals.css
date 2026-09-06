@@ -3415,58 +3415,62 @@ textarea:focus {
 
 .about-team-section > .section-text {
   max-width: 720px;
-  margin: 0 auto 24px;
+  margin: 0 auto 34px;
 }
 
 .about-team-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
+  gap: 28px;
   text-align: start;
 }
 
 .about-team-card {
   display: grid;
-  grid-template-columns: 148px minmax(0, 1fr);
-  gap: 18px;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 28px;
   align-items: center;
-  min-height: 188px;
-  padding: 18px;
+  min-height: 250px;
+  padding: 28px;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: calc(var(--radius) + 6px);
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--surface) 92%, transparent), color-mix(in srgb, var(--gold) 8%, var(--surface)));
   box-shadow: var(--shadow);
 }
 
 .about-team-card img {
-  width: 148px;
+  width: 190px;
   aspect-ratio: 1;
   object-fit: cover;
-  border-radius: 18px;
+  border-radius: 24px;
   background: color-mix(in srgb, var(--gold) 8%, #fff);
   border: 1px solid rgba(212, 175, 55, 0.2);
+  box-shadow: 0 18px 34px rgba(17, 24, 39, 0.12);
 }
 
 .about-team-card > .live-edit-image {
-  width: 148px;
+  width: 190px;
   display: block;
 }
 
 .about-team-card h3 {
-  margin: 0 0 6px;
-  font-size: clamp(22px, 2vw, 28px);
+  margin: 0 0 10px;
+  font-size: clamp(30px, 2.8vw, 42px);
+  line-height: 1.12;
 }
 
 .about-team-card strong {
   display: block;
   color: var(--gold-deep);
-  margin-bottom: 8px;
+  margin-bottom: 14px;
+  font-size: clamp(17px, 1.35vw, 22px);
 }
 
 .about-team-card p {
   margin: 0;
   color: var(--muted);
+  font-size: clamp(16px, 1.15vw, 19px);
   line-height: var(--copy-line);
 }
 
@@ -4765,15 +4769,18 @@ textarea:focus {
   }
 
   .about-team-card {
-    grid-template-columns: 116px minmax(0, 1fr);
+    grid-template-columns: 150px minmax(0, 1fr);
+    gap: 20px;
+    min-height: 220px;
+    padding: 22px;
   }
 
   .about-team-card img {
-    width: 116px;
+    width: 150px;
   }
 
   .about-team-card > .live-edit-image {
-    width: 116px;
+    width: 150px;
   }
 
   .hero-section {
@@ -4971,15 +4978,17 @@ textarea:focus {
   .about-team-card {
     grid-template-columns: 1fr;
     text-align: center;
+    min-height: 0;
+    padding: 24px 20px;
   }
 
   .about-team-card img {
-    width: min(180px, 62vw);
+    width: min(210px, 66vw);
     margin: 0 auto;
   }
 
   .about-team-card > .live-edit-image {
-    width: min(180px, 62vw);
+    width: min(210px, 66vw);
     margin: 0 auto;
   }
 
