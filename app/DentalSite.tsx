@@ -29,6 +29,7 @@ import {
   X,
 } from "lucide-react";
 import { createContext, type CSSProperties, FormEvent, type ReactNode, type SyntheticEvent, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 type Lang = "ar" | "en";
 type Page = "home" | "about" | "services" | "service-detail" | "cases" | "reviews" | "blog" | "contact" | "admin" | "not-found";
@@ -1350,25 +1351,51 @@ function isInsideLiveEditModal(event: SyntheticEvent<HTMLElement>) {
 function liveEditPopoverStyle(anchor: HTMLElement, width = 420, estimatedHeight = 260): CSSProperties {
   if (typeof window === "undefined") return {};
   const rect = anchor.getBoundingClientRect();
-  const edgeGap = 12;
-  const gap = 10;
+  const edgeGap = 14;
+  const gap = 12;
   const viewportWidth = window.innerWidth || 1280;
   const viewportHeight = window.innerHeight || 720;
   const isRtl = document.documentElement.dir === "rtl";
-  const idealLeft = isRtl ? rect.right - width : rect.left;
-  const maxLeft = Math.max(edgeGap, viewportWidth - width - edgeGap);
-  const left = Math.min(Math.max(edgeGap, idealLeft), maxLeft);
-  const belowTop = rect.bottom + gap;
-  const aboveTop = rect.top - estimatedHeight - gap;
-  const top = belowTop + estimatedHeight > viewportHeight
-    ? Math.max(edgeGap, aboveTop)
-    : Math.max(edgeGap, belowTop);
+  const popoverWidth = Math.min(width, viewportWidth - edgeGap * 2);
+  const spaceRight = viewportWidth - rect.right - edgeGap;
+  const spaceLeft = rect.left - edgeGap;
+  const canOpenRight = spaceRight >= popoverWidth + gap;
+  const canOpenLeft = spaceLeft >= popoverWidth + gap;
+  const preferredLeft = isRtl ? rect.left - popoverWidth - gap : rect.right + gap;
+  const oppositeLeft = isRtl ? rect.right + gap : rect.left - popoverWidth - gap;
+  const sideLeft = (isRtl ? canOpenLeft : canOpenRight)
+    ? preferredLeft
+    : (isRtl ? canOpenRight : canOpenLeft)
+      ? oppositeLeft
+      : rect.left;
+  const maxLeft = Math.max(edgeGap, viewportWidth - popoverWidth - edgeGap);
+  const left = Math.min(Math.max(edgeGap, sideLeft), maxLeft);
+  const maxTop = Math.max(edgeGap, viewportHeight - Math.min(estimatedHeight, viewportHeight - edgeGap * 2) - edgeGap);
+  const top = Math.min(Math.max(edgeGap, rect.top), maxTop);
 
   return {
     "--live-edit-popover-left": `${left}px`,
     "--live-edit-popover-top": `${top}px`,
-    "--live-edit-popover-width": `${Math.min(width, viewportWidth - edgeGap * 2)}px`,
+    "--live-edit-popover-width": `${popoverWidth}px`,
+    "--live-edit-popover-max-height": `${Math.max(220, viewportHeight - edgeGap * 2)}px`,
   } as CSSProperties;
+}
+
+function LiveEditPopover({ children, className = "", style }: { children: ReactNode; className?: string; style: CSSProperties }) {
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <span
+      className={className ? `live-edit-modal ${className}` : "live-edit-modal"}
+      style={style}
+      role="dialog"
+      aria-modal="true"
+      onClick={(event) => event.stopPropagation()}
+      onMouseDown={(event) => event.stopPropagation()}
+    >
+      {children}
+    </span>,
+    document.body,
+  );
 }
 
 function EditableText({ target, children, className, as = "span", valueOverride }: { target: LiveEditTarget; children: ReactNode; className?: string; as?: "span" | "p" | "h1" | "h2" | "h3" | "strong" | "button-label"; valueOverride?: string }) {
@@ -1403,7 +1430,7 @@ function EditableText({ target, children, className, as = "span", valueOverride 
       {children}
       <Edit3 className="live-edit-pencil" size={15} aria-hidden="true" />
       {modalOpen ? (
-        <span className="live-edit-modal" style={modalStyle} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+        <LiveEditPopover style={modalStyle}>
           <label>
             <span>Text</span>
             <textarea value={value} onChange={(event) => setValue(event.target.value)} />
@@ -1412,7 +1439,7 @@ function EditableText({ target, children, className, as = "span", valueOverride 
             <button type="button" onClick={() => void save()}><Check size={15} /> Save</button>
             <button type="button" onClick={() => setModalOpen(false)}>Cancel</button>
           </span>
-        </span>
+        </LiveEditPopover>
       ) : null}
     </Tag>
   );
@@ -1484,7 +1511,7 @@ function EditableLink({
       {children || text}
       <Edit3 className="live-edit-pencil" size={15} aria-hidden="true" />
       {modalOpen ? (
-        <span className="live-edit-modal live-edit-link-modal" style={modalStyle} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+        <LiveEditPopover className="live-edit-link-modal" style={modalStyle}>
           {textTarget ? (
             <label>
               <span>Text</span>
@@ -1501,7 +1528,7 @@ function EditableLink({
             <button type="button" onClick={() => void save()}><Check size={15} /> Save</button>
             <button type="button" onClick={() => setModalOpen(false)}>Cancel</button>
           </span>
-        </span>
+        </LiveEditPopover>
       ) : null}
     </a>
   );
@@ -1539,7 +1566,7 @@ function LiveEditableIcon({ target, value, size = 18 }: { target: LiveEditTarget
       {builderIcon(nextIcon, size)}
       <Edit3 className="live-edit-pencil" size={13} aria-hidden="true" />
       {modalOpen ? (
-        <span className="live-edit-modal live-edit-icon-modal" style={modalStyle} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+        <LiveEditPopover className="live-edit-icon-modal" style={modalStyle}>
           <strong>Icon</strong>
           <span className="live-edit-icon-grid">
             {cmsIconOptions.map((item) => (
@@ -1558,7 +1585,7 @@ function LiveEditableIcon({ target, value, size = 18 }: { target: LiveEditTarget
           <span className="live-edit-modal-actions">
             <button type="button" onClick={() => setModalOpen(false)}>Cancel</button>
           </span>
-        </span>
+        </LiveEditPopover>
       ) : null}
     </span>
   );
@@ -1752,7 +1779,7 @@ function LiveEditableDataCard({
       {children}
       <span className="live-edit-card-badge"><Edit3 size={14} /> {label}</span>
       {modalOpen ? (
-        <span className="live-edit-modal live-edit-data-modal" style={modalStyle} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+        <LiveEditPopover className="live-edit-data-modal" style={modalStyle}>
           <strong>{label}</strong>
           <span className="live-edit-data-fields">
             {fields.map((field) => (
@@ -1781,7 +1808,7 @@ function LiveEditableDataCard({
             <button type="button" onClick={() => void save()}><Check size={15} /> Save</button>
             <button type="button" onClick={() => setModalOpen(false)}>Cancel</button>
           </span>
-        </span>
+        </LiveEditPopover>
       ) : null}
     </div>
   );
@@ -1823,7 +1850,7 @@ function LiveEditableImage({ target, src, alt, className, loading, decorative }:
       <img className={className} src={src} alt={alt} loading={loading} aria-hidden={decorative ? "true" : undefined} />
       <span className="live-edit-image-badge"><ImageIcon size={15} /> تغيير</span>
       {modalOpen ? (
-        <span className="live-edit-modal live-edit-image-modal" style={modalStyle} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+        <LiveEditPopover className="live-edit-image-modal" style={modalStyle}>
           <label>
             <span>Image URL</span>
             <input value={url} onChange={(event) => setUrl(event.target.value)} />
@@ -1837,7 +1864,7 @@ function LiveEditableImage({ target, src, alt, className, loading, decorative }:
             <button type="button" onClick={() => void save()}><Check size={15} /> Save</button>
             <button type="button" onClick={() => setModalOpen(false)}>Cancel</button>
           </span>
-        </span>
+        </LiveEditPopover>
       ) : null}
     </span>
   );

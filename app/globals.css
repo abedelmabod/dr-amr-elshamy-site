@@ -723,7 +723,7 @@
   display: grid;
   gap: 12px;
   width: min(var(--live-edit-popover-width, 420px), calc(100vw - 24px));
-  max-height: min(78vh, 720px);
+  max-height: min(var(--live-edit-popover-max-height, 78vh), 720px);
   overflow: auto;
   padding: 16px;
   border: 1px solid rgba(212, 175, 55, 0.26);
@@ -9098,6 +9098,7 @@ body:has(.admin-live-focus) .route-stage {
   right: auto;
   transform: none;
   width: min(var(--live-edit-popover-width, 420px), calc(100vw - 24px));
+  max-height: min(var(--live-edit-popover-max-height, 78vh), 720px);
 }
 
 .live-edit-enabled :is(.live-edit-modal, .live-edit-modal *) {
