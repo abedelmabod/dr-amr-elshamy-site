@@ -10262,3 +10262,116 @@ body:has(.admin-dashboard-shell.admin-live-focus) {
   }
 }
 
+/* Header containment: keep live-edit outlines and controls inside the public nav bar. */
+.main-header {
+  box-sizing: border-box !important;
+  max-width: calc(100vw - 32px) !important;
+  overflow: visible;
+}
+
+@media (min-width: 1081px) {
+  .main-header {
+    display: grid !important;
+    grid-template-columns: minmax(214px, auto) minmax(0, 1fr) minmax(148px, auto);
+    grid-template-areas: "actions nav brand";
+    align-items: center;
+    column-gap: clamp(12px, 1.5vw, 24px) !important;
+    direction: ltr;
+  }
+
+  .brand,
+  .nav,
+  .header-actions {
+    min-width: 0;
+    direction: rtl;
+  }
+
+  .brand {
+    grid-area: brand;
+    justify-self: end;
+    width: clamp(136px, 11vw, 190px) !important;
+  }
+
+  .nav {
+    grid-area: nav;
+    justify-self: center;
+    width: 100%;
+    max-width: 710px;
+    gap: clamp(2px, 0.5vw, 8px) !important;
+  }
+
+  .nav a {
+    min-width: 0;
+    padding-inline: clamp(9px, 0.85vw, 14px) !important;
+    font-size: clamp(12.5px, 0.86vw, 13.5px) !important;
+  }
+
+  .header-actions {
+    grid-area: actions;
+    justify-self: start;
+    display: flex !important;
+    flex-wrap: nowrap;
+    max-width: 100%;
+    gap: 7px !important;
+  }
+
+  .header-actions :is(.lang-switch, .theme-switch, .book-button, .menu-button) {
+    flex: 0 0 auto;
+  }
+
+  .header-actions .book-button {
+    min-width: 0;
+    padding-inline: clamp(12px, 1vw, 18px) !important;
+    white-space: nowrap;
+  }
+
+  .header-actions .book-button .live-edit-text {
+    white-space: nowrap;
+  }
+}
+
+@media (min-width: 1081px) and (max-width: 1240px) {
+  .main-header {
+    width: min(100% - 20px, 1180px) !important;
+    grid-template-columns: minmax(196px, auto) minmax(0, 1fr) minmax(132px, auto);
+    padding-inline: 14px !important;
+  }
+
+  .brand {
+    width: 142px !important;
+  }
+
+  .brand-logo {
+    max-height: 72px !important;
+  }
+
+  .nav {
+    max-width: 620px;
+  }
+
+  .lang-switch {
+    width: 80px !important;
+  }
+
+  .theme-switch {
+    width: 66px !important;
+  }
+}
+
+@media (max-width: 1080px) {
+  .main-header {
+    max-width: 100vw !important;
+  }
+
+  .header-actions {
+    margin-inline-start: auto;
+    min-width: 0;
+  }
+
+  .header-actions .book-button {
+    max-width: min(180px, 42vw);
+    padding-inline: 12px !important;
+    white-space: nowrap;
+  }
+}
+
