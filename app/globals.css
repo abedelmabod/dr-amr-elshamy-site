@@ -10419,3 +10419,83 @@ body:has(.admin-dashboard-shell.admin-live-focus) {
   }
 }
 
+/* Admin workspace sizing: every dashboard page keeps the preview and editor aligned. */
+.admin-dashboard-shell:not(.admin-live-focus) .admin-main-panel {
+  overflow-x: hidden !important;
+}
+
+.admin-dashboard-shell:not(.admin-live-focus) .admin-live-workspace:not(.admin-live-workspace-liveEdit):not(.no-live-preview) {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 20px !important;
+  width: min(100%, 1540px);
+  margin-inline: auto;
+}
+
+.admin-dashboard-shell:not(.admin-live-focus) .admin-live-workspace:not(.admin-live-workspace-liveEdit):not(.no-live-preview) .admin-live-preview-card {
+  position: relative !important;
+  top: auto !important;
+  order: -1;
+  width: 100% !important;
+  height: clamp(340px, 42vh, 520px) !important;
+  min-height: 340px !important;
+  margin: 0 !important;
+}
+
+.admin-dashboard-shell:not(.admin-live-focus) .admin-live-workspace:not(.admin-live-workspace-liveEdit):not(.no-live-preview) .admin-live-preview-card iframe {
+  height: calc(100% - 54px) !important;
+}
+
+.admin-dashboard-shell:not(.admin-live-focus) .admin-editor-zone {
+  width: min(100%, 980px);
+  max-width: 980px;
+  margin-inline: auto;
+}
+
+.admin-dashboard-shell:not(.admin-live-focus) .admin-live-workspace.no-live-preview .admin-editor-zone {
+  width: min(100%, 1280px);
+  max-width: 1280px;
+  margin-inline: auto;
+}
+
+.admin-dashboard-shell:not(.admin-live-focus) .admin-editor-card,
+.admin-dashboard-shell:not(.admin-live-focus) .admin-settings-card,
+.admin-dashboard-shell:not(.admin-live-focus) .admin-quick-editor {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.admin-dashboard-shell:not(.admin-live-focus) .admin-quick-grid,
+.admin-dashboard-shell:not(.admin-live-focus) .admin-friendly-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-dashboard-shell:not(.admin-live-focus) :is(.admin-quick-grid, .admin-friendly-fields) :is(label, input, textarea, select) {
+  min-width: 0;
+}
+
+@media (min-width: 1500px) {
+  .admin-dashboard-shell:not(.admin-live-focus) .admin-editor-zone {
+    width: min(100%, 1080px);
+    max-width: 1080px;
+  }
+}
+
+@media (max-width: 900px) {
+  .admin-dashboard-shell:not(.admin-live-focus) .admin-main-panel {
+    padding-inline: 14px !important;
+  }
+
+  .admin-dashboard-shell:not(.admin-live-focus) .admin-live-workspace:not(.admin-live-workspace-liveEdit):not(.no-live-preview) .admin-live-preview-card {
+    height: min(68vh, 460px) !important;
+    min-height: 300px !important;
+  }
+
+  .admin-dashboard-shell:not(.admin-live-focus) .admin-quick-grid,
+  .admin-dashboard-shell:not(.admin-live-focus) .admin-friendly-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
