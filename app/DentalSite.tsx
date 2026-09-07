@@ -3280,7 +3280,7 @@ function Footer({ t, settings, config }: { t: (typeof copy)[Lang]; settings: Sit
   );
 }
 
-type AdminView = "home" | "control" | "homeContent" | "doctor" | "servicesManager" | "articles" | "reviews" | "gallery" | "bookings" | "faq" | "seo" | "analytics" | "media" | "activity" | "users" | "import" | "settings" | "security";
+type AdminView = "home" | "liveEdit" | "control" | "homeContent" | "doctor" | "servicesManager" | "articles" | "reviews" | "gallery" | "bookings" | "faq" | "seo" | "analytics" | "media" | "activity" | "users" | "import" | "settings" | "security";
 
 function AdminPage({ lang, t }: { lang: Lang; t: (typeof copy)[Lang] }) {
   const isArabic = lang === "ar";
@@ -3420,7 +3420,7 @@ function AdminPage({ lang, t }: { lang: Lang; t: (typeof copy)[Lang] }) {
             <a className="secondary-button admin-public-link" href="/" target="_blank" rel="noreferrer">
               {isArabic ? "عرض الموقع العام" : "View Public Site"}
             </a>
-            {previewPath ? (
+            {previewPath && activeView !== "liveEdit" ? (
               <button className="secondary-button" type="button" onClick={() => { setPreviewEditMode(true); localStorage.setItem("cms-edit-mode", "on"); setLiveViewFocused(true); }}>
                 {isArabic ? "تعديل مباشر" : "Live Edit"}
               </button>
@@ -3470,11 +3470,11 @@ function AdminPage({ lang, t }: { lang: Lang; t: (typeof copy)[Lang] }) {
 function adminPreviewPath(view: AdminView) {
   const paths: Partial<Record<AdminView, string>> = {
     home: "/",
+    liveEdit: "/",
     control: "/",
     homeContent: "/",
     doctor: "/about",
     servicesManager: "/services",
-    articles: "/blog",
     reviews: "/reviews",
     gallery: "/cases",
     faq: "/services",
@@ -3508,7 +3508,7 @@ function AdminLiveWorkspace({
   onToggleEditMode: (enabled: boolean) => void;
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  if (!previewPath) return <>{children}</>;
+  if (!previewPath) return <div className={`admin-live-workspace admin-live-workspace-${activeView} no-live-preview`}><div className="admin-editor-zone">{children}</div></div>;
   const separator = previewPath.includes("?") ? "&" : "?";
   const src = `${previewPath}${separator}cmsPreview=dr-amr-elshamy&previewVersion=${previewTick}`;
 
@@ -3521,7 +3521,7 @@ function AdminLiveWorkspace({
     <div className={`admin-live-workspace admin-live-workspace-${activeView}`}>
       <div className="admin-editor-zone">{children}</div>
       <aside className="admin-live-preview-card" aria-label={isArabic ? "معاينة مباشرة للموقع" : "Live website preview"}>
-        {isFocused ? (
+        {isFocused || activeView === "liveEdit" ? (
           <div className="admin-live-command-bar" aria-label={isArabic ? "أدوات التعديل المباشر" : "Live edit controls"}>
             <button type="button" onClick={onExitFocus}>{isArabic ? "رجوع للوحة" : "Dashboard"}</button>
             <button className={editMode ? "is-on" : ""} type="button" onClick={() => setIframeEditMode(!editMode)}>
@@ -3553,6 +3553,7 @@ function refreshAdminLivePreview() {
 function adminViewTitle(view: AdminView, isArabic: boolean) {
   const titles: Record<AdminView, [string, string]> = {
     home: ["نظرة عامة", "Overview"],
+    liveEdit: ["الايف فيو", "Live View"],
     control: ["مركز التحكم", "Control Center"],
     homeContent: ["إدارة الهوم", "Home Management"],
     doctor: ["بيانات الدكتور", "Doctor Profile"],
@@ -3578,7 +3579,7 @@ function adminViewTitle(view: AdminView, isArabic: boolean) {
 function allowedAdminViews(session: AdminSessionInfo | null): AdminView[] {
   if (!session) return ["home"];
   if (session.isSuperAdmin || ["admin", "owner", "super-admin", "super_admin"].includes(session.role || "")) {
-    return ["home", "control", "homeContent", "doctor", "servicesManager", "articles", "reviews", "gallery", "bookings", "faq", "seo", "analytics", "media", "activity", "users", "import", "settings", "security"];
+    return ["home", "liveEdit", "control", "homeContent", "doctor", "servicesManager", "articles", "reviews", "gallery", "bookings", "faq", "seo", "analytics", "media", "activity", "users", "import", "settings", "security"];
   }
   if (session.role === "content-writer") return ["articles"];
   if (session.role === "moderator") return ["reviews"];
@@ -3604,11 +3605,12 @@ function AdminSidebar({ activeView, isArabic, session, collapsed, onToggleCollap
   const allowedViews = new Set(allowedAdminViews(session));
   const siteLinks = [
     { key: "home" as const, label: isArabic ? "الرئيسية" : "Home", icon: <ClipboardCheck size={22} /> },
+    { key: "liveEdit" as const, label: isArabic ? "الايف فيو" : "Live View", icon: <Eye size={22} /> },
     { key: "control" as const, label: isArabic ? "مركز التحكم" : "Control", icon: <Sparkles size={22} /> },
     { key: "homeContent" as const, label: isArabic ? "إدارة الهوم" : "Home CMS", icon: <SearchCheck size={22} /> },
     { key: "doctor" as const, label: isArabic ? "الدكتور" : "Doctor", icon: <Stethoscope size={22} /> },
     { key: "servicesManager" as const, label: isArabic ? "الخدمات" : "Services", icon: <SmilePlus size={22} /> },
-    { key: "articles" as const, label: isArabic ? "المقالات" : "Articles", icon: <ClipboardList size={22} /> },
+    { key: "articles" as const, label: isArabic ? "إدارة المقالات" : "Articles Manager", icon: <ClipboardList size={22} /> },
     { key: "reviews" as const, label: isArabic ? "الآراء" : "Reviews", icon: <Star size={22} /> },
     { key: "gallery" as const, label: isArabic ? "قبل وبعد" : "Cases", icon: <SmilePlus size={22} /> },
     { key: "faq" as const, label: "FAQ", icon: <ClipboardCheck size={22} /> },
@@ -4215,6 +4217,43 @@ function ArticlesManager({ isArabic, onStatsChange }: { isArabic: boolean; onSta
     setLoading(false);
   }
 
+  async function toggleArticleVisibility(article: AdminArticle) {
+    setLoading(true);
+    const nextStatus: "published" | "draft" = article.status === "draft" ? "published" : "draft";
+    const response = await fetch("/api/admin/articles", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: article.id,
+        title: article.title,
+        slug: article.slug || "",
+        metaDescription: article.meta_description || "",
+        excerptAr: article.excerpt_ar || "",
+        excerptEn: article.excerpt_en || "",
+        coverImage: article.cover_image || "",
+        body: article.body,
+        conclusion: article.conclusion,
+        category: article.category || "Clinic Tips",
+        author: article.author || "Dr. Amr Elshamy",
+        featured: Boolean(article.featured),
+        faqItems: parseArticleFaqItems(article.faq_items),
+        status: nextStatus,
+        publishAt: article.publish_at || "",
+      }),
+    });
+
+    if (response.ok) {
+      setMessage(nextStatus === "draft" ? (isArabic ? "تم إخفاء المقال." : "Article hidden.") : (isArabic ? "تم إظهار المقال." : "Article published."));
+      await loadArticles(page);
+      await onStatsChange();
+      refreshAdminLivePreview();
+    } else {
+      const error = await response.json().catch(() => ({}));
+      setMessage(error.error || (isArabic ? "تعذر تغيير حالة المقال." : "Could not update article status."));
+    }
+    setLoading(false);
+  }
+
   function editArticle(article: AdminArticle) {
     setForm({
       id: article.id,
@@ -4305,37 +4344,32 @@ function ArticlesManager({ isArabic, onStatsChange }: { isArabic: boolean; onSta
             <option value="draft">{isArabic ? "مسودة" : "Draft"}</option>
           </select>
         </div>
-        <div className="admin-table-wrap">
-          <table className="admin-data-table">
-            <thead>
-              <tr>
-                <th>{isArabic ? "العنوان" : "Title"}</th>
-                <th>{isArabic ? "الحالة" : "Status"}</th>
-                <th>{isArabic ? "إجراءات" : "Actions"}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((article) => (
-                <tr key={article.id}>
-                  <td>
-                    <strong>{article.title}</strong>
-                    <small>{article.created_at ? new Date(article.created_at).toLocaleDateString() : ""}</small>
-                  </td>
-                  <td><AdminStatusBadge status={article.status} isArabic={isArabic} /></td>
-                  <td>
-                    <div className="admin-row-actions">
-                      <button type="button" onClick={() => editArticle(article)}>{isArabic ? "فتح المحرر" : "Open editor"}</button>
-                      {article.slug ? <a href={`/blog/${article.slug}`} target="_blank" rel="noreferrer">{isArabic ? "مشاهدة" : "View"}</a> : null}
-                      <button className="danger" type="button" onClick={() => void deleteArticle(article.id)}>{isArabic ? "حذف" : "Delete"}</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {!items.length ? <tr><td colSpan={3}>{loading ? (isArabic ? "جاري التحميل..." : "Loading...") : (isArabic ? "لا توجد مقالات." : "No articles found.")}</td></tr> : null}
-            </tbody>
-          </table>
+        <div className="article-card-index-grid">
+          {items.map((article) => (
+            <article className={article.status === "draft" ? "article-index-card is-hidden" : "article-index-card"} key={article.id}>
+              <div className="article-index-image">
+                {article.cover_image ? <img src={article.cover_image} alt="" loading="lazy" /> : <ImageIcon size={30} />}
+              </div>
+              <div className="article-index-content">
+                <AdminStatusBadge status={article.status} isArabic={isArabic} />
+                <h4>{article.title}</h4>
+                <small>{article.created_at ? new Date(article.created_at).toLocaleDateString() : ""}</small>
+              </div>
+              <div className="admin-row-actions article-index-actions">
+                <button type="button" onClick={() => editArticle(article)}>{isArabic ? "تعديل" : "Edit"}</button>
+                {article.slug ? <a href={`/blog/${article.slug}`} target="_blank" rel="noreferrer">{isArabic ? "مشاهدة" : "View"}</a> : null}
+                <button type="button" onClick={() => void toggleArticleVisibility(article)}>{article.status === "draft" ? (isArabic ? "إظهار" : "Show") : (isArabic ? "إخفاء" : "Hide")}</button>
+                <button className="danger" type="button" onClick={() => void deleteArticle(article.id)}>{isArabic ? "حذف" : "Delete"}</button>
+              </div>
+            </article>
+          ))}
+          {!items.length ? <div className="article-empty-state">{loading ? (isArabic ? "جاري التحميل..." : "Loading...") : (isArabic ? "لا توجد مقالات." : "No articles found.")}</div> : null}
         </div>
         <AdminPagination page={page} totalPages={totalPages} isArabic={isArabic} onPageChange={(next) => { setPage(next); void loadArticles(next); }} />
+        <button className="article-create-bottom-button" type="button" onClick={openNewArticle} aria-label={isArabic ? "إضافة مقال جديد" : "Add new article"}>
+          <span>+</span>
+          {isArabic ? "كتابة مقال جديد" : "Write New Article"}
+        </button>
       </section>
 
       {editorOpen ? (
