@@ -10094,6 +10094,121 @@ body:has(.admin-dashboard-shell.admin-live-focus) {
   }
 }
 
+/* Stable public live-edit toggle: floating only, no page push-down. */
+.live-edit-enabled {
+  padding-top: 0 !important;
+}
+
+.edit-mode-bar {
+  position: fixed !important;
+  top: 10px !important;
+  left: 50% !important;
+  right: auto !important;
+  z-index: 10050 !important;
+  width: auto !important;
+  min-width: 270px !important;
+  max-width: calc(100vw - 24px) !important;
+  min-height: 42px !important;
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 10px !important;
+  padding: 6px 10px !important;
+  border: 1px solid rgba(191, 154, 56, 0.32) !important;
+  border-radius: 999px !important;
+  background: rgba(255, 255, 255, 0.94) !important;
+  box-shadow: 0 14px 34px rgba(17, 24, 39, 0.12) !important;
+  backdrop-filter: blur(16px) saturate(1.06) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(1.06) !important;
+  transform: translateX(-50%) !important;
+  direction: rtl !important;
+}
+
+.edit-mode-bar strong,
+.edit-mode-bar a {
+  margin: 0 !important;
+  color: #111827 !important;
+  font-size: 13px !important;
+  font-weight: 950 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+}
+
+.edit-mode-bar a {
+  color: #9a7418 !important;
+  text-decoration: none !important;
+}
+
+.edit-mode-bar button {
+  position: relative !important;
+  flex: 0 0 70px !important;
+  width: 70px !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  overflow: hidden !important;
+  color: #fff !important;
+  background: #6b7280 !important;
+  font-size: 10px !important;
+  font-weight: 950 !important;
+  cursor: pointer !important;
+}
+
+.edit-mode-bar.is-on button {
+  background: linear-gradient(135deg, #22c55e, #15803d) !important;
+}
+
+.edit-mode-bar button i {
+  position: absolute !important;
+  top: 4px !important;
+  left: 4px !important;
+  width: 26px !important;
+  height: 26px !important;
+  border-radius: 50% !important;
+  background: #fff !important;
+  box-shadow: 0 6px 14px rgba(17, 24, 39, 0.16) !important;
+  transition: transform 0.2s ease !important;
+}
+
+.edit-mode-bar.is-on button i {
+  transform: translateX(36px) !important;
+}
+
+.edit-mode-bar button span {
+  position: relative !important;
+  z-index: 1 !important;
+  display: block !important;
+  padding: 0 24px 0 6px !important;
+  line-height: 34px !important;
+  text-align: center !important;
+}
+
+.edit-mode-bar.is-on button span {
+  padding: 0 6px 0 24px !important;
+}
+
+.live-edit-enabled .main-header {
+  margin-top: 74px !important;
+}
+
+@media (max-width: 760px) {
+  .edit-mode-bar {
+    top: 8px !important;
+    min-width: 0 !important;
+    width: calc(100vw - 18px) !important;
+    gap: 7px !important;
+  }
+
+  .edit-mode-bar strong,
+  .edit-mode-bar a {
+    font-size: 12px !important;
+  }
+}
+
 /* Public article detail alignment: match the centered live-site rhythm. */
 .article-detail.page-content {
   width: min(980px, calc(100% - 32px));
