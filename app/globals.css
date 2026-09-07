@@ -10094,3 +10094,56 @@ body:has(.admin-dashboard-shell.admin-live-focus) {
   }
 }
 
+/* Public article detail alignment: match the centered live-site rhythm. */
+.article-detail.page-content {
+  width: min(980px, calc(100% - 32px));
+  max-width: 980px;
+  margin: 0 auto;
+  padding: clamp(34px, 5vw, 64px) 0 clamp(64px, 7vw, 96px);
+}
+
+.article-detail-shell {
+  width: 100%;
+}
+
+.article-detail .article-back-link {
+  margin-inline: 0 auto;
+}
+
+.article-detail-body {
+  width: 100%;
+}
+
+.article-detail-body :is(.section-label, h1, .article-summary, .article-meta-row, .article-content, .article-footer-note) {
+  max-width: 100%;
+}
+
+.article-detail-body h1 {
+  font-size: clamp(38px, 5vw, 70px);
+}
+
+.article-content :is(p, .article-rich-output, ul, ol, blockquote) {
+  max-width: 820px;
+  margin-inline: auto;
+}
+
+.article-content :is(h1, h2, h3, figure, .article-video-embed, .article-divider, .article-spacer) {
+  max-width: 100%;
+}
+
+@media (max-width: 760px) {
+  .article-detail.page-content {
+    width: min(100% - 22px, 980px);
+    padding-top: 28px;
+  }
+
+  .article-detail-body {
+    padding: 20px 16px;
+    border-radius: 20px;
+  }
+
+  .article-detail-body h1 {
+    font-size: clamp(32px, 12vw, 48px);
+  }
+}
+
