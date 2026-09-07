@@ -9799,3 +9799,126 @@ body:has(.admin-dashboard-shell.admin-live-focus) {
   }
 }
 
+/* Article manager sizing pass: keep it balanced beside the live preview. */
+.admin-live-workspace.admin-live-workspace-articles {
+  grid-template-columns: minmax(620px, 0.96fr) minmax(620px, 1.04fr);
+  align-items: stretch;
+}
+
+.admin-live-workspace-articles .admin-editor-zone {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+}
+
+.admin-live-workspace-articles .articles-cms-page {
+  width: 100%;
+  max-width: 100%;
+}
+
+.admin-live-workspace-articles .articles-page-hero {
+  min-height: 176px;
+  padding: 20px 22px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.admin-live-workspace-articles .articles-page-hero h3 {
+  font-size: clamp(30px, 2.4vw, 44px);
+  line-height: 1.25;
+}
+
+.admin-live-workspace-articles .articles-page-hero p {
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.admin-live-workspace-articles .article-create-button {
+  min-width: 152px;
+  align-self: center;
+  white-space: nowrap;
+}
+
+.admin-live-workspace-articles .articles-index-card {
+  min-height: 0;
+  padding: 18px;
+}
+
+.admin-live-workspace-articles .admin-tools-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 210px;
+  align-items: center;
+}
+
+.admin-live-workspace-articles .admin-tools-row select {
+  max-width: none;
+}
+
+.admin-live-workspace-articles .admin-data-table {
+  table-layout: fixed;
+}
+
+.admin-live-workspace-articles .admin-data-table th:nth-child(1),
+.admin-live-workspace-articles .admin-data-table td:nth-child(1) {
+  width: 45%;
+}
+
+.admin-live-workspace-articles .admin-data-table th:nth-child(2),
+.admin-live-workspace-articles .admin-data-table td:nth-child(2) {
+  width: 18%;
+}
+
+.admin-live-workspace-articles .admin-data-table th:nth-child(3),
+.admin-live-workspace-articles .admin-data-table td:nth-child(3) {
+  width: 37%;
+}
+
+.admin-live-workspace-articles .admin-row-actions {
+  justify-content: flex-start;
+}
+
+.admin-live-workspace-articles .admin-row-actions :is(button, a) {
+  min-height: 38px;
+  padding-inline: 12px;
+  font-size: 13px;
+}
+
+.admin-live-workspace-articles .admin-live-preview-card {
+  min-height: 0;
+  height: calc(100vh - 100px);
+}
+
+@media (min-width: 1700px) {
+  .admin-live-workspace.admin-live-workspace-articles {
+    grid-template-columns: minmax(700px, 0.9fr) minmax(760px, 1.1fr);
+  }
+}
+
+@media (max-width: 1420px) {
+  .admin-live-workspace.admin-live-workspace-articles {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-live-workspace-articles .admin-live-preview-card {
+    position: relative;
+    top: auto;
+    height: min(720px, 72vh);
+    order: -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .admin-live-workspace-articles .articles-page-hero,
+  .admin-live-workspace-articles .admin-tools-row {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-live-workspace-articles .article-create-button {
+    width: 100%;
+  }
+
+  .admin-live-workspace-articles .admin-data-table {
+    table-layout: auto;
+  }
+}
+

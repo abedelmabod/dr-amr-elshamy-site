@@ -3430,6 +3430,7 @@ function AdminPage({ lang, t }: { lang: Lang; t: (typeof copy)[Lang] }) {
         </header>
 
         <AdminLiveWorkspace
+          activeView={activeView}
           previewPath={previewPath}
           previewTick={previewTick}
           isArabic={isArabic}
@@ -3485,6 +3486,7 @@ function adminPreviewPath(view: AdminView) {
 
 function AdminLiveWorkspace({
   children,
+  activeView,
   previewPath,
   previewTick,
   isArabic,
@@ -3495,6 +3497,7 @@ function AdminLiveWorkspace({
   onToggleEditMode,
 }: {
   children: ReactNode;
+  activeView: AdminView;
   previewPath: string;
   previewTick: number;
   isArabic: boolean;
@@ -3515,7 +3518,7 @@ function AdminLiveWorkspace({
   }
 
   return (
-    <div className="admin-live-workspace">
+    <div className={`admin-live-workspace admin-live-workspace-${activeView}`}>
       <div className="admin-editor-zone">{children}</div>
       <aside className="admin-live-preview-card" aria-label={isArabic ? "معاينة مباشرة للموقع" : "Live website preview"}>
         {isFocused ? (
