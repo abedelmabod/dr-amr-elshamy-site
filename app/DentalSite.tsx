@@ -71,6 +71,17 @@ type ServiceItem = {
   status?: string;
 };
 type HomeConfig = { serviceIds: number[]; articleIds: number[]; caseIds: number[]; reviewIds?: number[] };
+type TeamDoctor = {
+  key?: string;
+  image?: string;
+  nameAr?: string;
+  nameEn?: string;
+  roleAr?: string;
+  roleEn?: string;
+  bioAr?: string;
+  bioEn?: string;
+  enabled?: boolean;
+};
 type DoctorProfile = {
   nameAr?: string;
   nameEn?: string;
@@ -81,6 +92,7 @@ type DoctorProfile = {
   certifications?: string;
   yearsExperience?: string;
   imageUrl?: string;
+  teamDoctors?: TeamDoctor[];
 };
 type FaqItem = { id: number; question_ar: string; question_en: string; answer_ar: string; answer_en: string; page: string; sort_order: number; status?: string };
 type HeroConfig = Record<string, string>;
@@ -2493,7 +2505,7 @@ function AboutPageLuxury({ data, isArabic }: { data: SiteData; isArabic: boolean
   const teamTextKey = `aboutTeamText${suffix}`;
   const clinicTourLabelKey = `clinicTourLabel${suffix}`;
   const clinicTourTitleKey = `clinicTourTitle${suffix}`;
-  const assistantDoctors = [
+  const defaultTeamDoctors: TeamDoctor[] = [
     {
       key: "doctor2",
       image: "/icons/comfort-face.png",
@@ -2515,6 +2527,7 @@ function AboutPageLuxury({ data, isArabic }: { data: SiteData; isArabic: boolean
       bioEn: "Temporary editable details for the live editing mode.",
     },
   ];
+  const assistantDoctors = (profile.teamDoctors?.length ? profile.teamDoctors : defaultTeamDoctors).filter((doctor) => doctor.enabled !== false);
   return (
     <>
       <section className="about-editorial page-content">
@@ -2551,18 +2564,19 @@ function AboutPageLuxury({ data, isArabic }: { data: SiteData; isArabic: boolean
           {siteText[teamTextKey] || (isArabic ? "بيانات مؤقتة لحين إرسال الصور والمعلومات النهائية من العميل." : "Temporary details until the client sends the final photos and information.")}
         </EditableText>
         <div className="about-team-grid">
-          {assistantDoctors.map((doctor) => {
-            const image = siteText[`${doctor.key}Image`] || doctor.image;
-            const name = siteText[`${doctor.key}Name${suffix}`] || (isArabic ? doctor.nameAr : doctor.nameEn);
-            const role = siteText[`${doctor.key}Role${suffix}`] || (isArabic ? doctor.roleAr : doctor.roleEn);
-            const bio = siteText[`${doctor.key}Bio${suffix}`] || (isArabic ? doctor.bioAr : doctor.bioEn);
+          {assistantDoctors.map((doctor, index) => {
+            const doctorKey = doctor.key || `teamDoctor${index + 2}`;
+            const image = doctor.image || siteText[`${doctorKey}Image`] || "/icons/comfort-face.png";
+            const name = (isArabic ? doctor.nameAr : doctor.nameEn) || siteText[`${doctorKey}Name${suffix}`] || (isArabic ? "طبيب داخل الفريق" : "Team Doctor");
+            const role = (isArabic ? doctor.roleAr : doctor.roleEn) || siteText[`${doctorKey}Role${suffix}`] || (isArabic ? "طبيب أسنان" : "Dentist");
+            const bio = (isArabic ? doctor.bioAr : doctor.bioEn) || siteText[`${doctorKey}Bio${suffix}`] || (isArabic ? "بيانات مؤقتة قابلة للتعديل من لوحة التحكم." : "Temporary editable details from the dashboard.");
             return (
-              <article className="about-team-card" key={doctor.key}>
-                <LiveEditableImage target={{ group: "siteText", field: `${doctor.key}Image`, type: "image" }} src={image} alt={name} loading="lazy" />
+              <article className="about-team-card" key={doctorKey}>
+                <LiveEditableImage target={{ group: "doctorProfile", field: `teamDoctors.${index}.image`, type: "image" }} src={image} alt={name} loading="lazy" />
                 <div>
-                  <EditableText as="h3" target={{ group: "siteText", field: `${doctor.key}Name${suffix}` }}>{name}</EditableText>
-                  <EditableText as="strong" target={{ group: "siteText", field: `${doctor.key}Role${suffix}` }}>{role}</EditableText>
-                  <EditableText as="p" target={{ group: "siteText", field: `${doctor.key}Bio${suffix}` }}>{bio}</EditableText>
+                  <EditableText as="h3" target={{ group: "doctorProfile", field: `teamDoctors.${index}.name${suffix}` }}>{name}</EditableText>
+                  <EditableText as="strong" target={{ group: "doctorProfile", field: `teamDoctors.${index}.role${suffix}` }}>{role}</EditableText>
+                  <EditableText as="p" target={{ group: "doctorProfile", field: `teamDoctors.${index}.bio${suffix}` }}>{bio}</EditableText>
                 </div>
               </article>
             );
@@ -6015,6 +6029,31 @@ function OrderPicker({ title, selectedIds, options, onChange, isArabic }: { titl
 function DoctorProfileManager({ isArabic }: { isArabic: boolean }) {
   const [profile, setProfile] = useState<DoctorProfile>({});
   const [message, setMessage] = useState("");
+  const fallbackTeamDoctors: TeamDoctor[] = [
+    {
+      key: "doctor2",
+      image: "/icons/comfort-face.png",
+      nameAr: "د. سلمى أحمد",
+      nameEn: "Dr. Salma Ahmed",
+      roleAr: "طبيبة أسنان تجميلية",
+      roleEn: "Cosmetic Dentist",
+      bioAr: "بيانات مؤقتة لحين إرسال معلومات الطبيبة الحقيقية من العميل.",
+      bioEn: "Temporary profile until the client sends the doctor's real details.",
+      enabled: true,
+    },
+    {
+      key: "doctor3",
+      image: "/brand/dr-amr-cutout.png",
+      nameAr: "د. كريم محمود",
+      nameEn: "Dr. Karim Mahmoud",
+      roleAr: "طبيب علاج جذور وحشو",
+      roleEn: "Root Canal & Restorative Dentist",
+      bioAr: "بيانات مؤقتة قابلة للتعديل بالكامل من وضع التعديل.",
+      bioEn: "Temporary editable details for the live editing mode.",
+      enabled: true,
+    },
+  ];
+  const teamDoctors = profile.teamDoctors?.length ? profile.teamDoctors : fallbackTeamDoctors;
 
   async function load() {
     const response = await fetch("/api/admin/config");
@@ -6028,6 +6067,42 @@ function DoctorProfileManager({ isArabic }: { isArabic: boolean }) {
   async function uploadImage(file: File | undefined) {
     const url = await uploadAdminImage(file, isArabic, setMessage);
     if (url) setProfile({ ...profile, imageUrl: url });
+  }
+
+  async function uploadTeamDoctorImage(index: number, file: File | undefined) {
+    const url = await uploadAdminImage(file, isArabic, setMessage);
+    if (!url) return;
+    updateTeamDoctor(index, "image", url);
+  }
+
+  function updateTeamDoctor(index: number, field: keyof TeamDoctor, value: string | boolean) {
+    const nextDoctors = [...teamDoctors];
+    nextDoctors[index] = { ...nextDoctors[index], [field]: value };
+    setProfile({ ...profile, teamDoctors: nextDoctors });
+  }
+
+  function addTeamDoctor() {
+    setProfile({
+      ...profile,
+      teamDoctors: [
+        ...teamDoctors,
+        {
+          key: `doctor${Date.now()}`,
+          image: "/icons/comfort-face.png",
+          nameAr: "د. طبيب جديد",
+          nameEn: "New Doctor",
+          roleAr: "تخصص الطبيب",
+          roleEn: "Doctor Specialty",
+          bioAr: "اكتب نبذة الطبيب هنا.",
+          bioEn: "Write the doctor's bio here.",
+          enabled: true,
+        },
+      ],
+    });
+  }
+
+  function removeTeamDoctor(index: number) {
+    setProfile({ ...profile, teamDoctors: teamDoctors.filter((_, itemIndex) => itemIndex !== index) });
   }
 
   async function save(event: FormEvent<HTMLFormElement>) {
@@ -6071,8 +6146,65 @@ function DoctorProfileManager({ isArabic }: { isArabic: boolean }) {
           <input type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={(event) => void uploadImage(event.target.files?.[0])} />
           {profile.imageUrl ? <img className="admin-cover-preview" src={profile.imageUrl} alt="" /> : null}
         </label>
+        <div className="admin-team-doctors-panel">
+          <div className="admin-team-doctors-head">
+            <div>
+              <strong>{isArabic ? "الدكاترة الإضافيين" : "Additional Doctors"}</strong>
+              <span>{isArabic ? "بيانات مؤقتة يمكن تعديلها أو استبدال الصور عند وصول بيانات العميل." : "Temporary data that can be edited or replaced when the client sends final details."}</span>
+            </div>
+            <button className="secondary-button" type="button" onClick={addTeamDoctor}>{isArabic ? "+ دكتور جديد" : "+ Add Doctor"}</button>
+          </div>
+          <div className="admin-team-doctors-grid">
+            {teamDoctors.map((doctor, index) => (
+              <article className="admin-team-doctor-card" key={doctor.key || index}>
+                <div className="admin-team-doctor-media">
+                  <img src={doctor.image || "/icons/comfort-face.png"} alt="" />
+                  <label>
+                    <span>{isArabic ? "تغيير الصورة" : "Change photo"}</span>
+                    <input type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={(event) => void uploadTeamDoctorImage(index, event.target.files?.[0])} />
+                  </label>
+                </div>
+                <div className="admin-team-doctor-fields">
+                  <label>
+                    <span>{isArabic ? "الاسم عربي" : "Arabic name"}</span>
+                    <input value={doctor.nameAr || ""} onChange={(event) => updateTeamDoctor(index, "nameAr", event.target.value)} />
+                  </label>
+                  <label>
+                    <span>{isArabic ? "الاسم إنجليزي" : "English name"}</span>
+                    <input value={doctor.nameEn || ""} onChange={(event) => updateTeamDoctor(index, "nameEn", event.target.value)} />
+                  </label>
+                  <label>
+                    <span>{isArabic ? "التخصص عربي" : "Arabic specialty"}</span>
+                    <input value={doctor.roleAr || ""} onChange={(event) => updateTeamDoctor(index, "roleAr", event.target.value)} />
+                  </label>
+                  <label>
+                    <span>{isArabic ? "التخصص إنجليزي" : "English specialty"}</span>
+                    <input value={doctor.roleEn || ""} onChange={(event) => updateTeamDoctor(index, "roleEn", event.target.value)} />
+                  </label>
+                  <label>
+                    <span>{isArabic ? "نبذة عربي" : "Arabic bio"}</span>
+                    <textarea value={doctor.bioAr || ""} onChange={(event) => updateTeamDoctor(index, "bioAr", event.target.value)} />
+                  </label>
+                  <label>
+                    <span>{isArabic ? "نبذة إنجليزي" : "English bio"}</span>
+                    <textarea value={doctor.bioEn || ""} onChange={(event) => updateTeamDoctor(index, "bioEn", event.target.value)} />
+                  </label>
+                </div>
+                <div className="admin-team-doctor-actions">
+                  <label className="admin-check quick-check">
+                    <input type="checkbox" checked={doctor.enabled !== false} onChange={(event) => updateTeamDoctor(index, "enabled", event.target.checked)} />
+                    <span>{isArabic ? "إظهار الدكتور" : "Show doctor"}</span>
+                  </label>
+                  <button className="secondary-button danger" type="button" onClick={() => removeTeamDoctor(index)}>{isArabic ? "حذف" : "Delete"}</button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
         {message ? <p className="admin-form-message">{message}</p> : null}
-        <button className="primary-button" type="submit">{isArabic ? "حفظ بيانات الدكتور" : "Save Doctor Profile"}</button>
+        <div className="admin-save-row">
+          <button className="primary-button" type="submit">{isArabic ? "حفظ بيانات الدكتور" : "Save Doctor Profile"}</button>
+        </div>
       </form>
     </section>
   );
