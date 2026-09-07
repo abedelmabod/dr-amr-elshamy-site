@@ -9,21 +9,51 @@ type ArticleRow = {
   title: string;
   slug: string;
   meta_description?: string | null;
+  excerpt_ar?: string | null;
+  excerpt_en?: string | null;
   cover_image?: string | null;
   body: string;
   conclusion: string;
+  category?: string | null;
+  author?: string | null;
+  featured?: number | boolean | null;
+  faq_items?: string | null;
   status: string;
   created_at?: string;
   updated_at?: string | null;
+  publish_at?: string | null;
 };
+
+const articleSelect =
+  "SELECT id, title, slug, meta_description, excerpt_ar, excerpt_en, cover_image, body, conclusion, category, author, featured, faq_items, status, created_at, updated_at, publish_at FROM articles";
+
+function normalizeSlug(value: string) {
+  try {
+    return decodeURIComponent(value).normalize("NFC");
+  } catch {
+    return value.normalize("NFC");
+  }
+}
 
 async function getArticle(slug: string) {
   const db = await getDb();
-  return db.prepare(
-    "SELECT id, title, slug, meta_description, cover_image, body, conclusion, status, created_at, updated_at FROM articles WHERE slug = ? AND status = ? AND (publish_at IS NULL OR publish_at = '' OR publish_at <= ?) LIMIT 1"
+  const now = new Date().toISOString();
+  const normalizedSlug = normalizeSlug(slug);
+  const article = await db.prepare(
+    `${articleSelect} WHERE slug = ? AND status = ? AND (publish_at IS NULL OR publish_at = '' OR publish_at <= ?) LIMIT 1`
   )
-    .bind(slug, "published", new Date().toISOString())
+    .bind(slug, "published", now)
     .first<ArticleRow>();
+
+  if (article) return article;
+
+  const articles = await db.prepare(
+    `${articleSelect} WHERE status = ? AND (publish_at IS NULL OR publish_at = '' OR publish_at <= ?) ORDER BY id DESC`
+  )
+    .bind("published", now)
+    .all<ArticleRow>();
+
+  return (articles.results || []).find((item) => normalizeSlug(item.slug) === normalizedSlug);
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
@@ -57,5 +87,5 @@ export default async function BlogArticle({ params }: { params: Promise<{ slug: 
   const article = await getArticle(slug);
   if (!article) notFound();
 
-  return <ArticleDetailSite article={article} />;
+  return <ArticleDetailSite article={{ ...article }} />;
 }
