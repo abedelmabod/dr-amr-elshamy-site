@@ -5152,11 +5152,6 @@ function ControlCenterManager({ isArabic }: { isArabic: boolean }) {
         onChange={(value) => setConfig({ ...config, [active]: value })}
         isArabic={isArabic}
       />
-      <JsonEditor
-        value={config[active] || {}}
-        onChange={(value) => setConfig({ ...config, [active]: value })}
-        isArabic={isArabic}
-      />
       {message ? <p className="admin-form-message">{message}</p> : null}
       <button className="primary-button" type="button" onClick={() => void save()}>{isArabic ? "حفظ كل التحكمات" : "Save Controls"}</button>
     </section>
@@ -5513,9 +5508,10 @@ function ControlQuickEditor({ active, value, onChange, isArabic }: { active: key
   return (
     <div className="admin-quick-editor">
       <div className="admin-quick-head">
-        <strong>{isArabic ? "تحكم متقدم" : "Advanced Controls"}</strong>
-        <span>{isArabic ? "هذا الجزء متاح حالياً من محرر JSON المتقدم بالأسفل." : "This section is currently editable through the advanced JSON editor below."}</span>
+        <strong>{isArabic ? "خانات التحكم" : "Control Fields"}</strong>
+        <span>{isArabic ? "عدّل القيم من خانات واضحة بدون أكواد." : "Edit values with clear fields, no code required."}</span>
       </div>
+      <FriendlyObjectEditor value={record} onChange={onChange} isArabic={isArabic} />
     </div>
   );
 }
@@ -5835,30 +5831,71 @@ function BuilderImageListEditor({
   );
 }
 
-function JsonEditor({ value, onChange, isArabic }: { value: unknown; onChange: (value: unknown) => void; isArabic: boolean }) {
-  const [text, setText] = useState(JSON.stringify(value || {}, null, 2));
-  const [error, setError] = useState("");
+function FriendlyObjectEditor({ value, onChange, isArabic }: { value: Record<string, unknown>; onChange: (value: unknown) => void; isArabic: boolean }) {
+  const fields = useMemo(() => flattenDataCardFields(value), [value]);
+  const [fieldValues, setFieldValues] = useState<Record<string, string | boolean>>({});
 
   useEffect(() => {
-    setText(JSON.stringify(value || {}, null, 2));
-  }, [value]);
+    setFieldValues(Object.fromEntries(fields.map((field) => [field.path, field.value])));
+  }, [fields]);
 
-  function update(next: string) {
-    setText(next);
-    try {
-      onChange(JSON.parse(next || "{}"));
-      setError("");
-    } catch {
-      setError(isArabic ? "صيغة JSON غير صحيحة." : "Invalid JSON format.");
-    }
+  function setField(path: string, nextValue: string | boolean) {
+    const nextValues = { ...fieldValues, [path]: nextValue };
+    setFieldValues(nextValues);
+    onChange(buildDataCardPayload(value, nextValues));
+  }
+
+  if (!fields.length) {
+    return (
+      <div className="admin-friendly-empty">
+        {isArabic ? "لا توجد خانات محفوظة هنا حالياً." : "No saved fields are available here yet."}
+      </div>
+    );
   }
 
   return (
-    <label className="admin-json-field">
-      <span>{isArabic ? "عدّل البيانات بصيغة JSON" : "Edit JSON settings"}</span>
-      <textarea value={text} onChange={(event) => update(event.target.value)} spellCheck={false} />
-      {error ? <small className="admin-error">{error}</small> : null}
-    </label>
+    <div className="admin-friendly-fields">
+      {fields.map((field) => (
+        field.kind === "image" ? (
+          field.path.toLowerCase().endsWith("icon") ? (
+            <AdminIconPicker
+              key={field.path}
+              label={field.label}
+              value={String(fieldValues[field.path] ?? "")}
+              onChange={(nextValue) => setField(field.path, nextValue)}
+              isArabic={isArabic}
+            />
+          ) : (
+            <AdminImageUrlField
+              key={field.path}
+              label={field.label}
+              value={String(fieldValues[field.path] ?? "")}
+              onChange={(nextValue) => setField(field.path, nextValue)}
+              isArabic={isArabic}
+            />
+          )
+        ) : (
+          <label className={field.kind === "checkbox" ? "admin-check quick-check" : ""} key={field.path}>
+            <span>{field.label}</span>
+            {field.kind === "checkbox" ? (
+              <input type="checkbox" checked={Boolean(fieldValues[field.path])} onChange={(event) => setField(field.path, event.target.checked)} disabled={field.readonly} />
+            ) : field.kind === "select" ? (
+              <select value={String(fieldValues[field.path] ?? "")} onChange={(event) => setField(field.path, event.target.value)} disabled={field.readonly}>
+                <option value="published">{isArabic ? "منشور" : "Published"}</option>
+                <option value="approved">{isArabic ? "موافق عليه" : "Approved"}</option>
+                <option value="pending">{isArabic ? "بانتظار الموافقة" : "Pending"}</option>
+                <option value="draft">{isArabic ? "مسودة" : "Draft"}</option>
+                <option value="rejected">{isArabic ? "مرفوض" : "Rejected"}</option>
+              </select>
+            ) : field.kind === "textarea" ? (
+              <textarea value={String(fieldValues[field.path] ?? "")} onChange={(event) => setField(field.path, event.target.value)} disabled={field.readonly} />
+            ) : (
+              <input type={field.kind === "number" ? "number" : "text"} value={String(fieldValues[field.path] ?? "")} onChange={(event) => setField(field.path, event.target.value)} disabled={field.readonly} />
+            )}
+          </label>
+        )
+      ))}
+    </div>
   );
 }
 
