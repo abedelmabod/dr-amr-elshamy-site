@@ -28,7 +28,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { createContext, type CSSProperties, FormEvent, type ReactNode, type SyntheticEvent, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, type CSSProperties, type Dispatch, FormEvent, type ReactNode, type SetStateAction, type SyntheticEvent, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 type Lang = "ar" | "en";
@@ -2854,6 +2854,7 @@ function ArticleDetailPage({ article, isArabic, builder, siteText = {} }: { arti
   const coverImage = siteText[`article${article.id}CoverImage`] || article.cover_image || "";
   const backText = siteText[`articleBackText${suffix}`] || (isArabic ? "العودة للمقالات" : "Back to Blog");
   const ctaText = siteText[`articleBookText${suffix}`] || (isArabic ? "احجز استشارة الآن" : "Book a Consultation");
+  const articleBody = siteText[`article${article.id}Body${suffix}`] || article.body;
 
   async function shareArticle() {
     const url = typeof window !== "undefined" ? window.location.href : `/blog/${article.slug}`;
@@ -2907,7 +2908,7 @@ function ArticleDetailPage({ article, isArabic, builder, siteText = {} }: { arti
         </div>
         {displayExcerpt ? <EditableText as="p" className="article-summary" target={{ group: "siteText", field: `article${article.id}Excerpt${suffix}` }}>{siteText[`article${article.id}Excerpt${suffix}`] || displayExcerpt}</EditableText> : null}
         <div className="article-content">
-          <EditableText as="p" target={{ group: "siteText", field: `article${article.id}Body${suffix}` }}>{siteText[`article${article.id}Body${suffix}`] || article.body}</EditableText>
+          {renderArticleContent(articleBody)}
         </div>
         {articleFaqs.length ? (
           <div className="article-faq-inline">
@@ -3785,6 +3786,14 @@ const emptyArticleForm: ArticleFormState = {
   publishAt: "",
 };
 
+function createEmptyArticleForm(): ArticleFormState {
+  return {
+    ...emptyArticleForm,
+    blocks: [createArticleBlock("paragraph")],
+    faqItems: emptyArticleForm.faqItems.map((item) => ({ ...item })),
+  };
+}
+
 function parseArticleFaqItems(value?: string | null) {
   const empty = emptyArticleForm.faqItems.map((item) => ({ ...item }));
   if (!value) return empty;
@@ -3939,6 +3948,84 @@ function isImageLikeField(key: string) {
   return /image|img|photo|logo|thumb|cover/i.test(key);
 }
 
+function sanitizeArticleHtml(value: string) {
+  return value
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
+    .replace(/\son\w+="[^"]*"/gi, "")
+    .replace(/\son\w+='[^']*'/gi, "")
+    .replace(/javascript:/gi, "")
+    .replace(/<(?!\/?(strong|b|em|i|u|a|ul|ol|li|br|p)\b)[^>]*>/gi, "");
+}
+
+function isRichHtml(value: string) {
+  return /<\/?(strong|b|em|i|u|a|ul|ol|li|br|p)\b/i.test(value);
+}
+
+function RichParagraphBlock({
+  block,
+  index,
+  isArabic,
+  updateBlock,
+}: {
+  block: ArticleBlock;
+  index: number;
+  isArabic: boolean;
+  updateBlock: (index: number, updates: Partial<ArticleBlock>) => void;
+}) {
+  const editorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (editor && editor.innerHTML !== block.content) editor.innerHTML = block.content || "";
+  }, [block.id]);
+
+  function syncContent() {
+    const html = sanitizeArticleHtml(editorRef.current?.innerHTML || "");
+    updateBlock(index, { content: html });
+  }
+
+  function runCommand(command: "bold" | "italic" | "underline" | "insertUnorderedList" | "createLink") {
+    editorRef.current?.focus();
+    if (command === "createLink") {
+      const url = window.prompt(isArabic ? "اكتب رابط الصفحة" : "Enter link URL", "https://");
+      if (!url) return;
+      document.execCommand("createLink", false, url);
+    } else {
+      document.execCommand(command);
+    }
+    syncContent();
+  }
+
+  return (
+    <>
+      <div className="word-inline-toolbar">
+        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => runCommand("bold")}>B</button>
+        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => runCommand("italic")}>I</button>
+        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => runCommand("underline")}>U</button>
+        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => runCommand("insertUnorderedList")}>{isArabic ? "قائمة" : "List"}</button>
+        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => runCommand("createLink")}>{isArabic ? "رابط" : "Link"}</button>
+        <select value={block.metadata?.align || "start"} onChange={(event) => updateBlock(index, { metadata: { align: event.target.value as "start" | "center" | "end" } })}>
+          <option value="start">{isArabic ? "يمين/بداية" : "Start"}</option>
+          <option value="center">{isArabic ? "منتصف" : "Center"}</option>
+          <option value="end">{isArabic ? "يسار/نهاية" : "End"}</option>
+        </select>
+      </div>
+      <div
+        className={`block-rich-input align-${block.metadata?.align || "start"}`}
+        contentEditable
+        dir={isArabic ? "rtl" : "ltr"}
+        ref={editorRef}
+        role="textbox"
+        aria-multiline="true"
+        data-placeholder={isArabic ? "اكتب فقرة المقال هنا..." : "Write the article paragraph here..."}
+        suppressContentEditableWarning
+        onBlur={syncContent}
+        onInput={syncContent}
+      />
+    </>
+  );
+}
+
 function BlockArticleEditor({ blocks, onChange, isArabic, setMessage }: { blocks: ArticleBlock[]; onChange: (blocks: ArticleBlock[]) => void; isArabic: boolean; setMessage: (message: string) => void }) {
   function updateBlock(index: number, updates: Partial<ArticleBlock>) {
     onChange(blocks.map((block, blockIndex) => blockIndex === index ? { ...block, ...updates, metadata: { ...block.metadata, ...updates.metadata } } : block));
@@ -3966,18 +4053,6 @@ function BlockArticleEditor({ blocks, onChange, isArabic, setMessage }: { blocks
   async function uploadBlockImage(index: number, file: File | undefined) {
     const url = await uploadAdminImage(file, isArabic, setMessage);
     if (url) updateBlock(index, { content: url });
-  }
-
-  function applyInlineFormat(index: number, format: "bold" | "italic" | "link" | "list") {
-    const block = blocks[index];
-    const content = block.content || "";
-    const additions = {
-      bold: `**${isArabic ? "نص مهم" : "Important text"}**`,
-      italic: `_${isArabic ? "نص مائل" : "Italic text"}_`,
-      link: `[${isArabic ? "نص الرابط" : "Link text"}](https://example.com)`,
-      list: `- ${isArabic ? "نقطة أولى" : "First point"}\n- ${isArabic ? "نقطة ثانية" : "Second point"}`,
-    };
-    updateBlock(index, { content: `${content}${content ? "\n" : ""}${additions[format]}` });
   }
 
   const addTypes: ArticleBlockType[] = ["paragraph", "heading", "image", "video", "divider", "spacer"];
@@ -4030,17 +4105,7 @@ function BlockArticleEditor({ blocks, onChange, isArabic, setMessage }: { blocks
             ) : null}
 
             {block.type === "paragraph" ? (
-              <>
-                <div className="block-inline-controls">
-                  {(["bold", "italic", "link", "list"] as const).map((format) => <button type="button" key={format} onClick={() => applyInlineFormat(index, format)}>{format}</button>)}
-                  <select value={block.metadata?.align || "start"} onChange={(event) => updateBlock(index, { metadata: { align: event.target.value as "start" | "center" | "end" } })}>
-                    <option value="start">{isArabic ? "بداية" : "Start"}</option>
-                    <option value="center">{isArabic ? "منتصف" : "Center"}</option>
-                    <option value="end">{isArabic ? "نهاية" : "End"}</option>
-                  </select>
-                </div>
-                <textarea className={`block-paragraph-input align-${block.metadata?.align || "start"}`} value={block.content} onChange={(event) => updateBlock(index, { content: event.target.value })} placeholder={isArabic ? "اكتب فقرة المقال هنا" : "Write article paragraph here"} />
-              </>
+              <RichParagraphBlock block={block} index={index} isArabic={isArabic} updateBlock={updateBlock} />
             ) : null}
 
             {block.type === "image" ? (
@@ -4083,10 +4148,11 @@ function ArticlesManager({ isArabic, onStatsChange }: { isArabic: boolean; onSta
   const [status, setStatus] = useState<"all" | "published" | "draft">("all");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
-  const [form, setForm] = useState<ArticleFormState>(emptyArticleForm);
+  const [form, setForm] = useState<ArticleFormState>(() => createEmptyArticleForm());
   const [loading, setLoading] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [message, setMessage] = useState("");
   const pageSize = 6;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -4122,7 +4188,8 @@ function ArticlesManager({ isArabic, onStatsChange }: { isArabic: boolean; onSta
     });
 
     if (response.ok) {
-      setForm(emptyArticleForm);
+      setForm(createEmptyArticleForm());
+      setEditorOpen(false);
       setMessage(isArabic ? "تم حفظ المقال بنجاح." : "Article saved successfully.");
       await loadArticles(page);
       await onStatsChange();
@@ -4164,6 +4231,14 @@ function ArticlesManager({ isArabic, onStatsChange }: { isArabic: boolean; onSta
       status: article.status === "draft" ? "draft" : "published",
       publishAt: article.publish_at || "",
     });
+    setEditorOpen(true);
+  }
+
+  function openNewArticle() {
+    setForm(createEmptyArticleForm());
+    setMessage("");
+    setPreviewOpen(false);
+    setEditorOpen(true);
   }
 
   async function handleCoverUpload(file: File | undefined) {
@@ -4205,8 +4280,20 @@ function ArticlesManager({ isArabic, onStatsChange }: { isArabic: boolean; onSta
   }
 
   return (
-    <div className="admin-workspace-grid">
-      <section className="admin-table-card">
+    <div className="articles-cms-page">
+      <section className="articles-page-hero">
+        <div>
+          <span>{isArabic ? "مركز المحتوى" : "Content Studio"}</span>
+          <h3>{isArabic ? "إدارة وكتابة المقالات" : "Article Writing Workspace"}</h3>
+          <p>{isArabic ? "كل المقالات في صفحة واحدة، وزر الإضافة يفتح محرر كتابة كامل ومنظم يشبه Word." : "Manage every article from one page, then open a dedicated Word-like editor for writing."}</p>
+        </div>
+        <button className="article-create-button" type="button" onClick={openNewArticle} aria-label={isArabic ? "إضافة مقال جديد" : "Add new article"}>
+          <span>+</span>
+          {isArabic ? "مقال جديد" : "New Article"}
+        </button>
+      </section>
+
+      <section className="admin-table-card articles-index-card">
         <div className="admin-tools-row">
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={isArabic ? "ابحث بعنوان المقال" : "Search by title"} />
           <select value={status} onChange={(event) => setStatus(event.target.value as "all" | "published" | "draft")}>
@@ -4234,7 +4321,8 @@ function ArticlesManager({ isArabic, onStatsChange }: { isArabic: boolean; onSta
                   <td><AdminStatusBadge status={article.status} isArabic={isArabic} /></td>
                   <td>
                     <div className="admin-row-actions">
-                      <button type="button" onClick={() => editArticle(article)}>{isArabic ? "تعديل" : "Edit"}</button>
+                      <button type="button" onClick={() => editArticle(article)}>{isArabic ? "فتح المحرر" : "Open editor"}</button>
+                      {article.slug ? <a href={`/blog/${article.slug}`} target="_blank" rel="noreferrer">{isArabic ? "مشاهدة" : "View"}</a> : null}
                       <button className="danger" type="button" onClick={() => void deleteArticle(article.id)}>{isArabic ? "حذف" : "Delete"}</button>
                     </div>
                   </td>
@@ -4247,120 +4335,188 @@ function ArticlesManager({ isArabic, onStatsChange }: { isArabic: boolean; onSta
         <AdminPagination page={page} totalPages={totalPages} isArabic={isArabic} onPageChange={(next) => { setPage(next); void loadArticles(next); }} />
       </section>
 
-      <section className="admin-editor-card">
-        <h3>{form.id ? (isArabic ? "تعديل مقال" : "Edit Article") : (isArabic ? "مقال جديد" : "New Article")}</h3>
-        <form className="admin-form admin-editor-form" onSubmit={submitArticle}>
-          <div className="article-editor-section">
-            <strong>{isArabic ? "1. عنوان المقال" : "1. Article Title"}</strong>
-            <label>
-              <span>{isArabic ? "عنوان المقال" : "Article title"}</span>
-              <input required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} />
-            </label>
-            <label>
-              <span>{isArabic ? "رابط المقال SEO" : "SEO slug"}</span>
-              <input value={form.slug} onChange={(event) => setForm({ ...form, slug: event.target.value })} placeholder={isArabic ? "اتركه فارغًا للتوليد التلقائي" : "Leave empty to auto-generate"} />
-            </label>
-          </div>
-          <label>
-            <span>{isArabic ? "وصف محركات البحث" : "Meta description"}</span>
-            <textarea
-              maxLength={160}
-              value={form.metaDescription}
-              onChange={(event) => setForm({ ...form, metaDescription: event.target.value })}
-              placeholder={isArabic ? "وصف مختصر يظهر في نتائج البحث" : "Short search result snippet"}
-            />
-            <small className="admin-character-count">{form.metaDescription.length}/160</small>
-          </label>
-          <div className="admin-quick-grid compact">
-            <label>
-              <span>{isArabic ? "وصف مختصر عربي" : "Arabic excerpt"}</span>
-              <textarea value={form.excerptAr} onChange={(event) => setForm({ ...form, excerptAr: event.target.value })} />
-            </label>
-            <label>
-              <span>{isArabic ? "وصف مختصر إنجليزي" : "English excerpt"}</span>
-              <textarea value={form.excerptEn} onChange={(event) => setForm({ ...form, excerptEn: event.target.value })} placeholder={isArabic ? "لو فاضي الموقع يستخدم العربي" : "Arabic is used when empty"} />
-            </label>
-            <label>
-              <span>{isArabic ? "التصنيف" : "Category"}</span>
-              <select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>
-                <option value="Dental Implants">{isArabic ? "زراعة الأسنان" : "Dental Implants"}</option>
-                <option value="Cosmetic">{isArabic ? "تجميل الأسنان" : "Cosmetic"}</option>
-                <option value="Root Canal">{isArabic ? "علاج العصب" : "Root Canal"}</option>
-                <option value="Pediatric">{isArabic ? "أسنان الأطفال" : "Pediatric"}</option>
-                <option value="Clinic Tips">{isArabic ? "نصائح العيادة" : "Clinic Tips"}</option>
-              </select>
-            </label>
-            <label>
-              <span>{isArabic ? "الكاتب" : "Author"}</span>
-              <select value={form.author} onChange={(event) => setForm({ ...form, author: event.target.value })}>
-                <option value="Dr. Amr Elshamy">Dr. Amr Elshamy</option>
-                <option value="Clinic">{isArabic ? "العيادة" : "Clinic"}</option>
-              </select>
-            </label>
-            <label className="admin-check">
-              <input type="checkbox" checked={form.featured} onChange={(event) => setForm({ ...form, featured: event.target.checked })} />
-              <span>{isArabic ? "مقال مميز" : "Featured article"}</span>
-            </label>
-          </div>
-          <label className="admin-file-field">
-            <span>{isArabic ? "صورة الغلاف فقط" : "Cover image only"}</span>
-            <input type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={(event) => void handleCoverUpload(event.target.files?.[0])} />
-          </label>
-          {form.coverImage ? (
-            <div className="admin-cover-preview-wrap">
-              <img className="admin-cover-preview" src={form.coverImage} alt="Article cover preview" />
-              <div className="admin-preview-actions">
-                <button type="button" onClick={() => setForm((current) => ({ ...current, coverImage: "" }))}>{isArabic ? "حذف صورة الغلاف" : "Remove cover"}</button>
-                {form.id && form.slug ? <a href={`/blog/${form.slug}`} target="_blank" rel="noreferrer">{isArabic ? "فتح المقال" : "Open article"}</a> : null}
-              </div>
-            </div>
-          ) : null}
-          <BlockArticleEditor
-            blocks={form.blocks}
-            isArabic={isArabic}
-            setMessage={setMessage}
-            onChange={(blocks) => setForm((current) => ({ ...current, blocks, body: serializeArticleBlocks(blocks) }))}
-          />
-          <div className="article-editor-section article-footer-editor">
-            <strong>{isArabic ? "3. فوتر المقالة" : "3. Article Footer"}</strong>
-            <label>
-              <span>{isArabic ? "نص يظهر في آخر المقال" : "Text shown at the end of the article"}</span>
-              <textarea value={form.conclusion} onChange={(event) => setForm({ ...form, conclusion: event.target.value })} placeholder={isArabic ? "مثال: لو عندك سؤال عن حالتك، احجز كشف بسيط وهنشرح لك الخطة المناسبة." : "Example: If you have a question about your case, book a checkup and we will explain the right plan."} />
-            </label>
-          </div>
-          <div className="article-editor-section">
-            <strong>{isArabic ? "4. أسئلة المقال" : "4. Article FAQs"}</strong>
-            {form.faqItems.map((faq, index) => (
-              <div className="admin-quick-grid compact" key={index}>
-                <input value={faq.questionAr} onChange={(event) => updateFaq(index, "questionAr", event.target.value)} placeholder={isArabic ? `سؤال ${index + 1} عربي` : `FAQ ${index + 1} Arabic question`} />
-                <input value={faq.questionEn} onChange={(event) => updateFaq(index, "questionEn", event.target.value)} placeholder={isArabic ? `سؤال ${index + 1} إنجليزي` : `FAQ ${index + 1} English question`} />
-                <textarea value={faq.answerAr} onChange={(event) => updateFaq(index, "answerAr", event.target.value)} placeholder={isArabic ? "إجابة عربي" : "Arabic answer"} />
-                <textarea value={faq.answerEn} onChange={(event) => updateFaq(index, "answerEn", event.target.value)} placeholder={isArabic ? "إجابة إنجليزي" : "English answer"} />
-              </div>
-            ))}
-          </div>
-          <label>
-            <span>{isArabic ? "حالة المقال" : "Article status"}</span>
-            <select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as "published" | "draft" })}>
-              <option value="published">{isArabic ? "منشور" : "Published"}</option>
-              <option value="draft">{isArabic ? "مسودة" : "Draft"}</option>
-            </select>
-          </label>
-          <label>
-            <span>{isArabic ? "جدولة النشر" : "Schedule publishing"}</span>
-            <input type="datetime-local" value={form.publishAt} onChange={(event) => setForm({ ...form, publishAt: event.target.value })} />
-          </label>
-          {message ? <p className="admin-form-message">{message}</p> : null}
-          <div className="admin-editor-actions">
-            <button className="primary-button" type="submit" disabled={loading || uploadingCover}>{loading ? (isArabic ? "جاري الحفظ..." : "Saving...") : uploadingCover ? (isArabic ? "جاري رفع الصورة..." : "Uploading image...") : (isArabic ? "حفظ المقال" : "Save Article")}</button>
-            <button className="secondary-button" type="button" onClick={() => setPreviewOpen(true)}>{isArabic ? "معاينة المقال" : "Preview Article"}</button>
-            {form.id ? <button className="secondary-button" type="button" onClick={() => setForm(emptyArticleForm)}>{isArabic ? "إلغاء" : "Cancel"}</button> : null}
-          </div>
-        </form>
-      </section>
+      {editorOpen ? (
+        <ArticleEditorModal
+          form={form}
+          isArabic={isArabic}
+          loading={loading}
+          message={message}
+          uploadingCover={uploadingCover}
+          onClose={() => setEditorOpen(false)}
+          onSubmit={submitArticle}
+          setForm={setForm}
+          setMessage={setMessage}
+          setPreviewOpen={setPreviewOpen}
+          handleCoverUpload={handleCoverUpload}
+          updateFaq={updateFaq}
+        />
+      ) : null}
       {previewOpen ? <ArticlePreviewModal form={form} isArabic={isArabic} onClose={() => setPreviewOpen(false)} /> : null}
     </div>
   );
+}
+
+function ArticleEditorModal({
+  form,
+  isArabic,
+  loading,
+  message,
+  uploadingCover,
+  onClose,
+  onSubmit,
+  setForm,
+  setMessage,
+  setPreviewOpen,
+  handleCoverUpload,
+  updateFaq,
+}: {
+  form: ArticleFormState;
+  isArabic: boolean;
+  loading: boolean;
+  message: string;
+  uploadingCover: boolean;
+  onClose: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  setForm: Dispatch<SetStateAction<ArticleFormState>>;
+  setMessage: (message: string) => void;
+  setPreviewOpen: (open: boolean) => void;
+  handleCoverUpload: (file: File | undefined) => Promise<void>;
+  updateFaq: (index: number, key: keyof ArticleFormState["faqItems"][number], value: string) => void;
+}) {
+  if (typeof document === "undefined") return null;
+
+  const modal = (
+    <div className="article-editor-modal-overlay" role="dialog" aria-modal="true">
+      <form className="article-editor-modal" onSubmit={onSubmit}>
+        <header className="article-editor-topbar">
+          <div>
+            <span>{isArabic ? "محرر المقالات" : "Article Editor"}</span>
+            <strong>{form.id ? (isArabic ? "تعديل مقال" : "Edit Article") : (isArabic ? "مقال جديد" : "New Article")}</strong>
+          </div>
+          <div className="article-editor-commandbar">
+            <button type="button" onClick={() => setPreviewOpen(true)}>{isArabic ? "معاينة" : "Preview"}</button>
+            <button className="primary-button" type="submit" disabled={loading || uploadingCover}>
+              {loading ? (isArabic ? "جاري الحفظ..." : "Saving...") : uploadingCover ? (isArabic ? "جاري رفع الصورة..." : "Uploading...") : (isArabic ? "حفظ المقال" : "Save Article")}
+            </button>
+            <button className="article-editor-close" type="button" onClick={onClose} aria-label={isArabic ? "إغلاق المحرر" : "Close editor"}><X size={18} /></button>
+          </div>
+        </header>
+
+        <div className="article-editor-layout">
+          <main className="article-word-canvas">
+            <input
+              className="article-title-input"
+              required
+              value={form.title}
+              onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+              placeholder={isArabic ? "اكتب عنوان المقال هنا" : "Write the article title here"}
+            />
+            <textarea
+              className="article-meta-input"
+              maxLength={160}
+              value={form.metaDescription}
+              onChange={(event) => setForm((current) => ({ ...current, metaDescription: event.target.value }))}
+              placeholder={isArabic ? "وصف مختصر يظهر في نتائج البحث" : "Short search result snippet"}
+            />
+            <small className="admin-character-count">{form.metaDescription.length}/160</small>
+            {form.coverImage ? (
+              <div className="article-cover-editor">
+                <img src={form.coverImage} alt="Article cover preview" />
+                <button type="button" onClick={() => setForm((current) => ({ ...current, coverImage: "" }))}>{isArabic ? "حذف صورة الغلاف" : "Remove cover"}</button>
+              </div>
+            ) : (
+              <label className="article-cover-drop">
+                <ImageIcon size={28} />
+                <span>{isArabic ? "اضغط لإضافة صورة غلاف" : "Click to add a cover image"}</span>
+                <input type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={(event) => void handleCoverUpload(event.target.files?.[0])} />
+              </label>
+            )}
+            <BlockArticleEditor
+              blocks={form.blocks}
+              isArabic={isArabic}
+              setMessage={setMessage}
+              onChange={(blocks) => setForm((current) => ({ ...current, blocks, body: serializeArticleBlocks(blocks) }))}
+            />
+            <section className="article-editor-section article-footer-editor">
+              <strong>{isArabic ? "فوتر المقالة" : "Article Footer"}</strong>
+              <textarea value={form.conclusion} onChange={(event) => setForm((current) => ({ ...current, conclusion: event.target.value }))} placeholder={isArabic ? "نص يظهر في آخر المقال" : "Text shown at the end of the article"} />
+            </section>
+          </main>
+
+          <aside className="article-meta-sidebar">
+            <section>
+              <h4>{isArabic ? "إعدادات النشر" : "Publishing"}</h4>
+              <label>
+                <span>{isArabic ? "الحالة" : "Status"}</span>
+                <select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as "published" | "draft" }))}>
+                  <option value="published">{isArabic ? "منشور" : "Published"}</option>
+                  <option value="draft">{isArabic ? "مسودة" : "Draft"}</option>
+                </select>
+              </label>
+              <label className="admin-check">
+                <input type="checkbox" checked={form.featured} onChange={(event) => setForm((current) => ({ ...current, featured: event.target.checked }))} />
+                <span>{isArabic ? "مقال مميز" : "Featured article"}</span>
+              </label>
+              <label>
+                <span>{isArabic ? "جدولة النشر" : "Schedule publishing"}</span>
+                <input type="datetime-local" value={form.publishAt} onChange={(event) => setForm((current) => ({ ...current, publishAt: event.target.value }))} />
+              </label>
+            </section>
+
+            <section>
+              <h4>{isArabic ? "بيانات المقال" : "Article Data"}</h4>
+              <label>
+                <span>{isArabic ? "رابط المقال SEO" : "SEO slug"}</span>
+                <input value={form.slug} onChange={(event) => setForm((current) => ({ ...current, slug: event.target.value }))} placeholder={isArabic ? "يتولد تلقائياً لو فاضي" : "Auto-generated if empty"} />
+              </label>
+              <label>
+                <span>{isArabic ? "التصنيف" : "Category"}</span>
+                <select value={form.category} onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}>
+                  <option value="Dental Implants">{isArabic ? "زراعة الأسنان" : "Dental Implants"}</option>
+                  <option value="Cosmetic">{isArabic ? "تجميل الأسنان" : "Cosmetic"}</option>
+                  <option value="Root Canal">{isArabic ? "علاج العصب" : "Root Canal"}</option>
+                  <option value="Pediatric">{isArabic ? "أسنان الأطفال" : "Pediatric"}</option>
+                  <option value="Clinic Tips">{isArabic ? "نصائح العيادة" : "Clinic Tips"}</option>
+                </select>
+              </label>
+              <label>
+                <span>{isArabic ? "الكاتب" : "Author"}</span>
+                <select value={form.author} onChange={(event) => setForm((current) => ({ ...current, author: event.target.value }))}>
+                  <option value="Dr. Amr Elshamy">Dr. Amr Elshamy</option>
+                  <option value="Clinic">{isArabic ? "العيادة" : "Clinic"}</option>
+                </select>
+              </label>
+              <label>
+                <span>{isArabic ? "وصف مختصر عربي" : "Arabic excerpt"}</span>
+                <textarea value={form.excerptAr} onChange={(event) => setForm((current) => ({ ...current, excerptAr: event.target.value }))} />
+              </label>
+              <label>
+                <span>{isArabic ? "وصف مختصر إنجليزي" : "English excerpt"}</span>
+                <textarea value={form.excerptEn} onChange={(event) => setForm((current) => ({ ...current, excerptEn: event.target.value }))} placeholder={isArabic ? "لو فاضي الموقع يستخدم العربي" : "Arabic is used when empty"} />
+              </label>
+            </section>
+
+            <section>
+              <h4>{isArabic ? "أسئلة المقال" : "Article FAQs"}</h4>
+              {form.faqItems.map((faq, index) => (
+                <div className="article-faq-mini" key={index}>
+                  <input value={faq.questionAr} onChange={(event) => updateFaq(index, "questionAr", event.target.value)} placeholder={isArabic ? `سؤال ${index + 1} عربي` : `FAQ ${index + 1} Arabic question`} />
+                  <textarea value={faq.answerAr} onChange={(event) => updateFaq(index, "answerAr", event.target.value)} placeholder={isArabic ? "إجابة عربي" : "Arabic answer"} />
+                  <input value={faq.questionEn} onChange={(event) => updateFaq(index, "questionEn", event.target.value)} placeholder={isArabic ? `سؤال ${index + 1} إنجليزي` : `FAQ ${index + 1} English question`} />
+                  <textarea value={faq.answerEn} onChange={(event) => updateFaq(index, "answerEn", event.target.value)} placeholder={isArabic ? "إجابة إنجليزي" : "English answer"} />
+                </div>
+              ))}
+            </section>
+
+            {form.id && form.slug ? <a className="article-public-link" href={`/blog/${form.slug}`} target="_blank" rel="noreferrer">{isArabic ? "فتح المقال المنشور" : "Open published article"}</a> : null}
+            {message ? <p className="admin-form-message">{message}</p> : null}
+          </aside>
+        </div>
+      </form>
+    </div>
+  );
+
+  return createPortal(modal, document.body);
 }
 
 function ArticlePreviewModal({ form, isArabic, onClose }: { form: ArticleFormState; isArabic: boolean; onClose: () => void }) {
@@ -4492,6 +4648,9 @@ function renderArticleBlock(block: ArticleBlock) {
   const lines = block.content.split("\n").map((line) => line.trim()).filter(Boolean);
   if (lines.length && lines.every((line) => line.startsWith("- "))) {
     return <ul className={alignClass} key={block.id}>{lines.map((line) => <li key={line}>{renderInlineArticleText(line.slice(2))}</li>)}</ul>;
+  }
+  if (isRichHtml(block.content)) {
+    return <div className={`article-rich-output ${alignClass}`} key={block.id} dangerouslySetInnerHTML={{ __html: sanitizeArticleHtml(block.content) }} />;
   }
   return <p className={alignClass} key={block.id}>{renderInlineArticleText(block.content)}</p>;
 }
